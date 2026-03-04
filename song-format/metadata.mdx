@@ -1,0 +1,228 @@
+---
+title: Metadata Fields
+description: Complete reference for song header fields and configuration options
+---
+
+The header section of a song file contains metadata and configuration. Each field uses the format `key=value` and must appear before any section markers (lines starting with `#`).
+
+## Required Fields
+
+<ParamField path="name" type="string" required>
+  The name of the song as displayed in the player.
+  
+  ```txt
+  name=My Song Title
+  ```
+</ParamField>
+
+<ParamField path="albumArt" type="string" required>
+  Path to the album artwork image file relative to the assets folder.
+  
+  ```txt
+  albumArt=img/album.jpg
+  ```
+</ParamField>
+
+<ParamField path="filePath" type="string" required>
+  Path to the audio file relative to the assets folder.
+  
+  ```txt
+  filePath=files/song.mp3
+  ```
+</ParamField>
+
+## Display Information
+
+<ParamField path="artist" type="string">
+  Name of the artist or performer.
+  
+  ```txt
+  artist=John Doe
+  ```
+</ParamField>
+
+<ParamField path="album" type="string">
+  Name of the album this song belongs to.
+  
+  ```txt
+  album=Greatest Hits
+  ```
+</ParamField>
+
+<ParamField path="translatedName" type="string">
+  Alternative or translated title for the song.
+  
+  ```txt
+  translatedName=My Song (English Version)
+  ```
+</ParamField>
+
+<ParamField path="year" type="integer">
+  Release year of the song.
+  
+  ```txt
+  year=2024
+  ```
+</ParamField>
+
+<ParamField path="writtenBy" type="string">
+  Credits for who wrote or translated the lyrics.
+  
+  ```txt
+  writtenBy=Lyrics by Jane Smith
+  ```
+</ParamField>
+
+## Timing Configuration
+
+<ParamField path="offset" type="number">
+  Time offset in seconds to apply to all lyrics. Use this to fine-tune synchronization if the timing is slightly off.
+  
+  Positive values delay the lyrics, negative values make them appear earlier.
+  
+  ```txt
+  offset=0.3
+  ```
+</ParamField>
+
+## Layout Options
+
+<ParamField path="alignment" type="enum">
+  Default text alignment for all lyric lines.
+  
+  **Values:**
+  - `left` - Left-aligned text
+  - `center` - Center-aligned text (default)
+  - `right` - Right-aligned text
+  
+  ```txt
+  alignment=center
+  ```
+  
+  <Note>
+    Individual lines can override this using inline modifiers like `#alignment=right`
+  </Note>
+</ParamField>
+
+<ParamField path="fontOverride" type="string">
+  Path to a custom font file to use for lyrics. Useful for displaying special characters (e.g., CJK languages) or using a different font style.
+  
+  ```txt
+  fontOverride=fonts/NotoSansCJK.ttf
+  ```
+  
+  <Info>
+    If your song needs a different font for displaying special characters (e.g., CJK or another non-Latin language), specify it here.
+  </Info>
+</ParamField>
+
+## Background Styling
+
+<ParamField path="bgColor" type="hex color">
+  Primary background color as a 6-digit hexadecimal value (without the `#` prefix).
+  
+  ```txt
+  bgColor=972566
+  ```
+  
+  <Info>
+    Colors can be sampled from the album art for dynamic theming.
+  </Info>
+</ParamField>
+
+<ParamField path="bgColorSecondary" type="hex color">
+  Secondary background color used in gradient effects.
+  
+  ```txt
+  bgColorSecondary=000000
+  ```
+</ParamField>
+
+<ParamField path="bgType" type="enum">
+  Background rendering type that determines the visual style.
+  
+  **Values:**
+  - `simpleGradient` - Linear gradient between primary and secondary colors
+  - `solid` - Solid color background using `bgColor`
+  - `sands` - Animated sand dunes gradient effect
+  - `randomGradient` - Randomized gradient pattern
+  - `amLike` - Apple Music-like animated gradient
+  - `cloud` - Cloud-like animated gradient
+  
+  ```txt
+  bgType=simpleGradient
+  ```
+  
+  <Note>
+    Some background types like `amLike` and `cloud` use shaders for animated effects.
+  </Note>
+</ParamField>
+
+## Advanced Options
+
+<ParamField path="assumeFullSubTiming" type="boolean">
+  When enabled, adds a single sub-timing with the same duration as the line itself when none is provided. This enables dynamic fill effects to work with the linear fill mode.
+  
+  **Values:** `yes` or `no`
+  
+  ```txt
+  assumeFullSubTiming=yes
+  ```
+  
+  <Info>
+    This is useful for enabling dynamic fill effects on songs that don't have detailed sub-timing information.
+  </Info>
+</ParamField>
+
+<ParamField path="karaoke" type="string">
+  Internal flag for categorizing the song.
+  
+  ```txt
+  karaoke=true
+  ```
+</ParamField>
+
+<ParamField path="language" type="string">
+  Language code or name for the song's lyrics.
+  
+  ```txt
+  language=en
+  ```
+</ParamField>
+
+<ParamField path="hidden" type="string">
+  Internal flag for visibility in the song menu.
+  
+  ```txt
+  hidden=false
+  ```
+</ParamField>
+
+## Complete Example
+
+Here's a fully configured header section:
+
+```txt
+name=未来へ (To the Future)
+translatedName=To the Future
+artist=山田太郎
+album=Best Collection
+year=2024
+albumArt=img/yamada/future.jpg
+filePath=audio/yamada/mirai.mp3
+alignment=center
+offset=-0.15
+bgColor=4A90E2
+bgColorSecondary=1A3A5C
+bgType=amLike
+fontOverride=fonts/NotoSansJP.ttf
+assumeFullSubTiming=yes
+language=ja
+writtenBy=Translated by user123
+#timings
+...
+```
+
+<Warning>
+  All header fields must appear **before** any section markers (`#timings`, `#lyrics`, etc.). The parser will stop processing header fields once it encounters a section marker.
+</Warning>

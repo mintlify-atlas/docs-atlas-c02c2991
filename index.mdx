@@ -1,97 +1,189 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Etsuko Documentation"
+description: "A karaoke application with real-time synced lyrics and custom song format support"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#E91E63] to-[#C2185B] dark:from-[#C2185B] dark:to-[#880E4F] py-20">
+  <div className="max-w-5xl mx-auto px-6">
+    <div className="flex flex-col lg:flex-row items-center gap-12">
+      <div className="flex-1 text-center lg:text-left">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Welcome to Etsuko
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 mb-8 max-w-2xl">
+          A powerful karaoke application featuring real-time synced lyrics, custom song formats, and beautiful visual effects. Built with OpenGL and designed for music enthusiasts.
+        </p>
+        <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#E91E63] font-semibold hover:bg-gray-100 transition-colors no-underline"
+          >
+            Get Started
+          </a>
+          <a 
+            href="/song-format/overview" 
+            className="inline-flex items-center px-6 py-3 rounded-lg border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors no-underline"
+          >
+            Song Format Guide
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Quick start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get up and running with Etsuko in just a few steps
+  </p>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <Steps>
+    <Step title="Clone the repository">
+      Clone the Etsuko repository from GitHub to your local machine.
+      
+      ```bash
+      git clone https://github.com/lazpeng/etsuko.git
+      cd etsuko
+      ```
+    </Step>
+    
+    <Step title="Install dependencies">
+      Install the required dependencies for your platform. On Linux or macOS with a package manager:
+      
+      ```bash
+      # Example for Ubuntu/Debian
+      sudo apt-get install cmake ninja-build libglew-dev libglfw3-dev libopenal-dev
+      ```
+      
+      <Info>See the [Requirements](/building/requirements) page for detailed platform-specific instructions.</Info>
+    </Step>
+    
+    <Step title="Build and run">
+      Configure and build the project using CMake with the desktop-release preset.
+      
+      ```bash
+      cmake --preset desktop-release
+      cmake --build --preset desktop-release
+      cd ./build/desktop-release
+      ./etsuko
+      ```
+      
+      <Note>You'll need to configure a song file in `config.c` before running. See the [Song Format Guide](/song-format/overview) for details.</Note>
+    </Step>
+  </Steps>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Explore features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Discover what makes Etsuko unique
+  </p>
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
+  <CardGroup cols={2}>
     <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      title="Real-time synced lyrics"
+      icon="music"
+      href="/modules/karaoke-mode"
+    >
+      Display lyrics synchronized with audio playback, featuring dynamic fill effects and character-by-character timing.
+    </Card>
+    <Card
+      title="Custom song format"
+      icon="file-lines"
+      href="/song-format/overview"
+    >
+      Use a flexible text-based format to define songs with metadata, timings, and reading hints for multiple languages.
+    </Card>
+    <Card
+      title="OpenGL rendering"
+      icon="paintbrush"
+      href="/architecture/renderer"
+    >
+      Hardware-accelerated graphics with custom shaders, gradients, and visual effects powered by OpenGL.
+    </Card>
+    <Card
+      title="Multi-platform support"
+      icon="globe"
+      href="/building/web-build"
+    >
+      Build for desktop (Linux, macOS, Windows) or web browsers using WebAssembly and Emscripten.
+    </Card>
+    <Card
+      title="Reading hints"
+      icon="language"
+      href="/song-format/reading-hints"
+    >
+      Add pronunciation guides and reading hints for CJK characters and non-Latin writing systems.
+    </Card>
+    <Card
+      title="Visual customization"
+      icon="palette"
+      href="/configuration/visual-options"
+    >
+      Choose from multiple background types, gradient effects, and color schemes to match your style.
+    </Card>
+  </CardGroup>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Documentation sections
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Find what you need in our comprehensive documentation
+  </p>
 
-Everything you need to create world-class documentation.
+  <CardGroup cols={2}>
+    <Card
+      title="Building Etsuko"
+      icon="hammer"
+      href="/building/desktop-build"
+    >
+      Step-by-step instructions for building Etsuko on desktop and web platforms.
+    </Card>
+    <Card
+      title="Song format reference"
+      icon="book"
+      href="/song-format/overview"
+    >
+      Complete reference for the custom song format including metadata, timings, and advanced features.
+    </Card>
+    <Card
+      title="Configuration guide"
+      icon="sliders"
+      href="/configuration/settings"
+    >
+      Learn how to configure fonts, visual options, and application behavior.
+    </Card>
+    <Card
+      title="Architecture overview"
+      icon="sitemap"
+      href="/architecture/overview"
+    >
+      Understand Etsuko's core components and how the application is structured.
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] p-8 text-center">
+    <h2 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+      Ready to create your first song?
+    </h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-2xl mx-auto">
+      Start building your karaoke library with Etsuko's flexible song format and powerful rendering engine.
+    </p>
+    <a 
+      href="/quickstart" 
+      className="inline-flex items-center px-6 py-3 rounded-lg bg-[#E91E63] text-white font-semibold hover:bg-[#C2185B] transition-colors no-underline"
+    >
+      Get Started Now
+    </a>
+  </div>
+</div>

@@ -1,0 +1,186 @@
+---
+title: 'Architecture Overview'
+description: 'High-level architecture of the Etsuko karaoke application'
+---
+
+## Application Structure
+
+Etsuko is organized around a global initialization system and mode-based execution model. The core architecture is defined in `etsuko.h` and provides the foundation for all application functionality.
+
+### Global Initialization
+
+The application uses a one-time initialization pattern:
+
+```c
+void global_init(void);
+void global_finish(void);
+```
+
+<Note>
+  `global_init()` and `global_finish()` should only be called **once** per application run. They initialize resources shared across all operating modes.
+</Note>
+
+These functions set up subsystems that persist throughout the entire application lifetime:
+- OpenGL rendering context
+- OpenAL audio device
+- Font loading and text rendering
+- Event system
+
+## Operating Modes
+
+Etsuko operates in one of two distinct modes:
+
+```c
+typedef enum Config_OpMode_t {
+    APP_MODE_NONE = 0,
+    APP_MODE_KARAOKE,  // Single song with album art and scrolling lyrics
+    APP_MODE_MENU,     // Song selection menu
+} Config_OpMode_t;
+```
+
+### Karaoke Mode
+Displays a single song with:
+- Album art on one side
+- Scrolling, synchronized lyrics on the other
+- Audio playback with time synchronization
+- Background effects based on album art colors
+
+### Menu Mode
+Provides song selection interface:
+- Browse available songs
+- Select songs to launch karaoke mode
+- Navigation and search functionality
+
+## Mode Switching
+
+Mode transitions are handled through a controlled switching mechanism:
+
+```c
+void global_mode_switch(Config_OpMode_t mode);
+AppStatus_t global_load();
+AppStatus_t global_loop();
+void global_update();
+```
+
+<Info>
+  Mode switching automatically handles cleanup of the previous mode's resources before initializing the new mode.
+</Info>
+
+### Mode Lifecycle
+
+1. **Switch**: Call `global_mode_switch()` to initiate transition
+2. **Load**: Call `global_load()` repeatedly until it returns `APP_STATUS_OK`
+3. **Run**: Call `global_loop()` each frame to execute mode logic
+4. **Update**: Call `global_update()` to apply pending state changes
+
+```c
+typedef enum AppStatus_t {
+    APP_STATUS_OK = 0,
+    APP_STATUS_FAILURE,
+    APP_STATUS_LOADING,
+} AppStatus_t;
+```
+
+<Note>
+  **Important**: Mode switching mid-frame can cause issues. Always use `global_update()` to apply mode changes at safe points in the frame cycle.
+</Note>
+
+## Core Subsystems
+
+Etsuko is built on four primary subsystems:
+
+<Accordion title="Renderer System">
+  OpenGL-based rendering with texture management, shadow effects, and compositing.
+  
+  - **Location**: `renderer.h`
+  - **Key Functions**: `render_init()`, `render_draw_texture()`, `render_make_text()`
+  - **Features**: Text rendering, image loading, rounded rectangles, blur effects, render targets
+</Accordion>
+
+<Accordion title="Audio System">
+  OpenAL-based audio playback with MP3 decoding and time synchronization.
+  
+  - **Location**: `audio.h`
+  - **Key Functions**: `audio_init()`, `audio_play()`, `audio_seek()`
+  - **Features**: MP3 streaming, playback control, time tracking, seeking
+</Accordion>
+
+<Accordion title="UI System">
+  Custom UI framework with hierarchical containers and layout management.
+  
+  - **Location**: `ui.h`
+  - **Key Functions**: `ui_init()`, `ui_make_text()`, `ui_make_container()`
+  - **Features**: Scene graph, layout engine, animations, event handling
+</Accordion>
+
+<Accordion title="Event System">
+  Input handling and event dispatch for mouse and keyboard interactions.
+  
+  - **Key Events**: Mouse move, click, hover, key press
+  - **Integration**: Tied to UI system for interactive elements
+</Accordion>
+
+## Main Loop and Update Cycle
+
+The application follows a standard game loop pattern:
+
+```c
+while (running) {
+    // 1. Load mode if needed
+    if (!global_mode_finished_loading()) {
+        if (global_load() == APP_STATUS_FAILURE) {
+            // Handle error
+        }
+        continue;
+    }
+    
+    // 2. Execute mode logic
+    if (global_loop() == APP_STATUS_FAILURE) {
+        // Handle error
+    }
+    
+    // 3. Apply pending changes
+    global_update();
+}
+```
+
+### Frame Cycle
+
+Each frame follows this sequence:
+
+1. **Input Processing**: Handle mouse/keyboard events
+2. **Update Logic**: Execute mode-specific logic via `global_loop()`
+3. **Layout Computation**: Calculate UI element positions
+4. **Rendering**: Draw all UI elements and effects
+5. **State Updates**: Apply pending changes via `global_update()`
+
+### Rendering Pipeline
+
+Within each frame, rendering proceeds as:
+
+```c
+render_clear();              // Clear framebuffer, apply background
+ui_begin_loop(ui);          // Prepare UI for rendering
+ui_draw(ui);                // Draw all UI elements
+ui_end_loop();              // Finalize UI rendering
+render_present();           // Swap buffers, present to screen
+```
+
+## Helper Functions
+
+```c
+Config_OpMode_t global_active_mode();       // Get current mode
+bool global_mode_finished_loading();         // Check if mode is ready
+void etsuko_setup_version(struct Ui_t *ui); // Display version info
+void etsuko_navigate(const char *path);      // Update web address bar (web build)
+```
+
+## Architecture Benefits
+
+This design provides:
+
+- **Clean separation** between global resources and mode-specific resources
+- **Safe mode transitions** with automatic resource cleanup
+- **Asynchronous loading** support via `APP_STATUS_LOADING`
+- **Frame-safe updates** through deferred state changes
+- **Reusable subsystems** across different operating modes

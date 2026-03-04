@@ -1,0 +1,467 @@
+---
+title: Build Requirements
+description: Dependencies and system requirements for building Etsuko
+---
+
+This page covers all the requirements needed to build Etsuko for desktop and web platforms.
+
+## Core Build Tools
+
+Required for all builds:
+
+<Tabs>
+  <Tab title="CMake">
+    **Minimum version:** 3.14  
+    **Recommended:** 3.25 or higher
+    
+    CMake is used to configure and generate the build system.
+    
+    ```bash
+    # Check your CMake version
+    cmake --version
+    ```
+    
+    <Note>
+    The CMakePresets.json file requires CMake 3.25+. Older versions can still build the project by passing configuration options manually.
+    </Note>
+  </Tab>
+  
+  <Tab title="Ninja">
+    Ninja is the required build system generator for all presets.
+    
+    ```bash
+    # Check if Ninja is installed
+    ninja --version
+    ```
+    
+    All CMake presets specify Ninja as the generator:
+    
+    ```json
+    {
+      "name": "base",
+      "generator": "Ninja"
+    }
+    ```
+  </Tab>
+  
+  <Tab title="C Compiler">
+    **Standard:** C23  
+    **Preferred:** Clang  
+    **Supported:** GCC, MSVC
+    
+    The project uses modern C23 features:
+    
+    ```cmake
+    set(CMAKE_C_STANDARD 23)
+    ```
+    
+    Clang is recommended but GCC should work fine. On Windows, either MSVC or Clang-cl can be used.
+  </Tab>
+</Tabs>
+
+## Installation Commands
+
+### Linux (Debian/Ubuntu)
+
+```bash
+# Build tools
+sudo apt-get update
+sudo apt-get install cmake ninja-build clang
+
+# Development libraries
+sudo apt-get install libglew-dev libglfw3-dev libopenal-dev libssl-dev
+```
+
+<Info>
+OpenGL is typically included with the graphics drivers on Linux. If not, install `libgl1-mesa-dev`.
+</Info>
+
+### Linux (Fedora/RHEL)
+
+```bash
+# Build tools
+sudo dnf install cmake ninja-build clang
+
+# Development libraries
+sudo dnf install glew-devel glfw-devel openal-soft-devel openssl-devel
+```
+
+### Linux (Arch)
+
+```bash
+# Build tools
+sudo pacman -S cmake ninja clang
+
+# Development libraries
+sudo pacman -S glew glfw openal openssl
+```
+
+### macOS
+
+```bash
+# Install Homebrew if not already installed
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Build tools
+brew install cmake ninja
+
+# Development libraries
+brew install glew glfw openal-soft
+```
+
+<Note>
+OpenGL is included with macOS by default. The Xcode Command Line Tools provide the necessary compiler (Clang).
+</Note>
+
+### Windows
+
+For Windows, **using vcpkg is strongly recommended** instead of manual installation:
+
+```powershell
+# Clone vcpkg
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+
+# Bootstrap vcpkg
+.\bootstrap-vcpkg.bat
+
+# Install dependencies (optional, vcpkg preset will handle this)
+.\vcpkg install glew glfw3 openal-soft openssl
+
+# Set environment variable
+$env:VCPKG_ROOT = "C:\path\to\vcpkg"
+```
+
+Then use the vcpkg-enabled presets:
+
+```powershell
+cmake --preset vcpkg-release
+cmake --build --preset vcpkg-release
+```
+
+<Warning>
+Manual dependency installation on Windows is complex and error-prone. The vcpkg approach is **strongly recommended**.
+</Warning>
+
+## Desktop Dependencies
+
+Required for desktop builds (Linux, macOS, Windows):
+
+### OpenGL
+
+**Purpose:** Graphics rendering API
+
+- Usually included with graphics drivers
+- No explicit installation typically needed
+- CMake finds it via `find_package(OpenGL REQUIRED)`
+
+```cmake
+find_package(OpenGL REQUIRED)
+target_link_libraries(etsuko PRIVATE OpenGL::GL)
+```
+
+### GLEW (OpenGL Extension Wrangler)
+
+**Purpose:** OpenGL extension loading library
+
+- Required for accessing modern OpenGL functions
+- Must be installed as a development package
+
+```cmake
+find_package(GLEW REQUIRED)
+target_link_libraries(etsuko PRIVATE GLEW::GLEW)
+```
+
+<Info>
+On some platforms, GLEW may be available as both static and shared libraries. The CMake find module will typically prefer the shared library.
+</Info>
+
+### GLFW3
+
+**Purpose:** Window creation and input handling
+
+- Version 3.x required
+- Provides cross-platform window management
+- Handles keyboard, mouse, and gamepad input
+
+```cmake
+find_package(glfw3 REQUIRED)
+target_link_libraries(etsuko PRIVATE glfw)
+```
+
+### OpenAL
+
+**Purpose:** Audio playback API
+
+- Cross-platform 3D audio API
+- Handles audio decoding and playback
+- Required for music playback
+
+```cmake
+find_package(OpenAL REQUIRED)
+target_link_libraries(etsuko PRIVATE OpenAL::OpenAL)
+```
+
+<Note>
+On Linux, use `libopenal-dev`. On macOS, use `openal-soft` from Homebrew (the system OpenAL framework should also work).
+</Note>
+
+### OpenSSL
+
+**Purpose:** HTTPS and cryptographic functions
+
+- Required for remote repository features
+- Provides SSL/TLS support
+
+```cmake
+find_package(OpenSSL REQUIRED)
+target_link_libraries(etsuko PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+```
+
+### Threading Library
+
+**Purpose:** Multi-threading support
+
+- POSIX threads (pthreads) on Unix-like systems
+- Automatically detected by CMake
+
+```cmake
+find_package(Threads REQUIRED)
+target_link_libraries(etsuko PRIVATE Threads::Threads)
+```
+
+### Math Library
+
+**Purpose:** Mathematical functions
+
+- Standard C math library
+- Linked explicitly on Unix-like systems
+
+```cmake
+target_link_libraries(etsuko PRIVATE m)
+```
+
+## Web Build Dependencies
+
+For WebAssembly builds targeting the browser:
+
+### Emscripten SDK
+
+**Purpose:** Compile C/C++ to WebAssembly
+
+**Installation:**
+
+```bash
+# Clone the Emscripten SDK
+git clone https://github.com/emscripten-core/emsdk.git
+cd emsdk
+
+# Install and activate latest SDK
+./emsdk install latest
+./emsdk activate latest
+
+# Set up environment (run this in each new shell)
+source ./emsdk_env.sh  # Linux/macOS
+emsdk_env.bat          # Windows
+```
+
+**What it provides:**
+- Emscripten compiler (emcc)
+- GLFW3 port (via `-sUSE_GLFW=3`)
+- OpenAL port (via `-lopenal`)
+- WebGL bindings (OpenGL ES 3.0)
+- emrun local web server
+
+<Info>
+With Emscripten, **no external dependencies** are needed. Everything is provided by the Emscripten SDK.
+</Info>
+
+The `wasm-release` preset automatically configures the Emscripten toolchain:
+
+```json
+{
+  "cacheVariables": {
+    "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+    "CMAKE_SYSROOT": "$env{EMSDK}/upstream/emscripten/cache/sysroot",
+    "CMAKE_SYSTEM_NAME": "Emscripten"
+  }
+}
+```
+
+## Using vcpkg (Optional)
+
+vcpkg is a cross-platform package manager that simplifies dependency management, especially on Windows.
+
+<Steps>
+  <Step title="Install vcpkg">
+    ```bash
+    git clone https://github.com/Microsoft/vcpkg.git
+    cd vcpkg
+    
+    # Linux/macOS
+    ./bootstrap-vcpkg.sh
+    
+    # Windows
+    .\bootstrap-vcpkg.bat
+    ```
+  </Step>
+  
+  <Step title="Set environment variable">
+    ```bash
+    # Linux/macOS
+    export VCPKG_ROOT=/path/to/vcpkg
+    
+    # Windows PowerShell
+    $env:VCPKG_ROOT = "C:\path\to\vcpkg"
+    ```
+  </Step>
+  
+  <Step title="Use vcpkg presets">
+    ```bash
+    # Debug build
+    cmake --preset vcpkg-debug
+    cmake --build --preset vcpkg-debug
+    
+    # Release build
+    cmake --preset vcpkg-release
+    cmake --build --preset vcpkg-release
+    ```
+  </Step>
+</Steps>
+
+The vcpkg presets automatically use the vcpkg toolchain:
+
+```json
+{
+  "name": "vcpkg-base",
+  "cacheVariables": {
+    "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+  }
+}
+```
+
+<Note>
+vcpkg will automatically download and build all required dependencies during the CMake configure step. This may take several minutes on the first build.
+</Note>
+
+## Bundled Dependencies
+
+The following libraries are included in the source code (in `contrib/`) and require no installation:
+
+- **stb_image** - Image loading (public domain)
+- **stb_truetype** - TrueType font rendering (public domain)
+- **minimp3** - MP3 audio decoding (public domain)
+
+These libraries are compiled with warnings suppressed:
+
+```cmake
+set_source_files_properties(src/contrib/stb_image.c PROPERTIES COMPILE_FLAGS "-w")
+set_source_files_properties(src/contrib/stb_truetype.c PROPERTIES COMPILE_FLAGS "-w")
+set_source_files_properties(src/contrib/minimp3.c PROPERTIES COMPILE_FLAGS "-w")
+```
+
+## Verification
+
+To verify all requirements are met:
+
+```bash
+# Check CMake
+cmake --version  # Should be 3.14+
+
+# Check Ninja
+ninja --version
+
+# Check compiler
+clang --version  # or gcc --version
+
+# Try configuring (will fail if dependencies are missing)
+cmake --preset desktop-release
+```
+
+If any dependencies are missing, CMake will report clear error messages:
+
+```
+CMake Error at CMakeLists.txt:81 (find_package):
+  Could not find a package configuration file provided by "glfw3" with any
+  of the following names:
+
+    glfw3Config.cmake
+    glfw3-config.cmake
+```
+
+## Platform Summary
+
+<Tabs>
+  <Tab title="Linux">
+    **Recommended approach:** System package manager
+    
+    ```bash
+    # Ubuntu/Debian
+    sudo apt-get install cmake ninja-build clang \
+      libglew-dev libglfw3-dev libopenal-dev libssl-dev
+    
+    cmake --preset desktop-release
+    cmake --build --preset desktop-release
+    ```
+    
+    ✅ Most straightforward platform  
+    ✅ All dependencies readily available  
+    ✅ Primary development platform
+  </Tab>
+  
+  <Tab title="macOS">
+    **Recommended approach:** Homebrew
+    
+    ```bash
+    brew install cmake ninja glew glfw openal-soft
+    
+    cmake --preset desktop-release
+    cmake --build --preset desktop-release
+    ```
+    
+    ✅ Simple with Homebrew  
+    ✅ OpenGL included with system  
+    ⚠️ May require Xcode Command Line Tools
+  </Tab>
+  
+  <Tab title="Windows">
+    **Recommended approach:** vcpkg
+    
+    ```powershell
+    # Set up vcpkg once
+    git clone https://github.com/Microsoft/vcpkg.git
+    cd vcpkg
+    .\bootstrap-vcpkg.bat
+    $env:VCPKG_ROOT = "C:\path\to\vcpkg"
+    
+    # Build
+    cmake --preset vcpkg-release
+    cmake --build --preset vcpkg-release
+    ```
+    
+    ⚠️ Manual installation not recommended  
+    ✅ vcpkg handles everything automatically  
+    ⚠️ Initial vcpkg setup takes time
+  </Tab>
+  
+  <Tab title="Web/WASM">
+    **Recommended approach:** Emscripten SDK
+    
+    ```bash
+    # Set up Emscripten once
+    git clone https://github.com/emscripten-core/emsdk.git
+    cd emsdk
+    ./emsdk install latest
+    ./emsdk activate latest
+    
+    # Build
+    source ./emsdk_env.sh
+    cmake --preset wasm-release
+    cmake --build --preset wasm-release
+    ```
+    
+    ✅ No external dependencies needed  
+    ✅ Everything provided by Emscripten  
+    ⚠️ Requires secret.h with CDN_BASE_PATH
+  </Tab>
+</Tabs>

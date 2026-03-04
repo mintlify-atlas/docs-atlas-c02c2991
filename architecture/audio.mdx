@@ -1,0 +1,397 @@
+---
+title: 'Audio System'
+description: 'OpenAL-based audio playback with MP3 decoding and time synchronization'
+---
+
+## Overview
+
+The audio system (`audio.h`) provides MP3 audio playback using OpenAL for audio output and minimp3 for MP3 decoding. It handles streaming, playback control, seeking, and time synchronization for karaoke lyrics.
+
+## Initialization
+
+```c
+void audio_init(void);
+void audio_finish(void);
+```
+
+**`audio_init()`** initializes:
+- OpenAL audio device
+- OpenAL context
+- Audio source and buffers for streaming
+- MP3 decoder state
+
+**`audio_finish()`** cleans up all audio resources including:
+- OpenAL buffers
+- Audio source
+- Context and device
+- Decoder state
+
+<Note>
+  Call `audio_init()` once during application startup after `global_init()`. Call `audio_finish()` during shutdown before `global_finish()`.
+</Note>
+
+## Loading Audio
+
+```c
+void audio_load(const unsigned char *data, int data_size);
+```
+
+Loads an MP3 audio file for playback.
+
+**Parameters**:
+- `data`: Raw MP3 file data
+- `data_size`: Size of the data in bytes
+
+**Process**:
+1. Copies input data for internal use
+2. Initializes minimp3 decoder
+3. Reads MP3 stream metadata (sample rate, channels, duration)
+4. Prepares streaming buffers
+
+<Info>
+  Currently, the audio system only supports **MP3** format. The decoder extracts sample rate, channel configuration, and total duration from the stream.
+</Info>
+
+## Playback Control
+
+### Playing and Pausing
+
+```c
+void audio_resume(void);
+void audio_pause(void);
+```
+
+**`audio_resume()`**: Starts or resumes playback of a paused or stopped stream.
+
+**`audio_pause()`**: Pauses the currently playing stream.
+
+**Example**:
+```c
+// Load and start playback
+audio_load(mp3_data, mp3_size);
+audio_resume();
+
+// Pause during gameplay
+audio_pause();
+
+// Resume playback
+audio_resume();
+```
+
+### Checking Playback State
+
+```c
+bool audio_is_paused(void);
+```
+
+Returns `true` if the audio is currently paused or stopped, `false` if playing.
+
+## Seeking
+
+### Absolute Seeking
+
+```c
+void audio_seek(double time);
+```
+
+Seeks to a specific timestamp in the audio stream.
+
+**Parameters**:
+- `time`: Target time in seconds from the start of the track
+
+**Example**:
+```c
+// Seek to 30 seconds into the song
+audio_seek(30.0);
+```
+
+### Relative Seeking
+
+```c
+void audio_seek_relative(double diff);
+```
+
+Seeks relative to the current playback position.
+
+**Parameters**:
+- `diff`: Time offset in seconds (positive = forward, negative = backward)
+
+**Example**:
+```c
+// Skip forward 10 seconds
+audio_seek_relative(10.0);
+
+// Rewind 5 seconds
+audio_seek_relative(-5.0);
+```
+
+<Note>
+  Seeking in MP3 files requires finding the nearest frame boundary. The actual seek position may be slightly adjusted to align with frame boundaries.
+</Note>
+
+## Time Synchronization
+
+### Current Playback Time
+
+```c
+double audio_elapsed_time(void);
+```
+
+Returns an estimate of the current playback position in seconds.
+
+**Use case**: Synchronize lyrics with audio playback.
+
+### Total Duration
+
+```c
+double audio_total_time(void);
+```
+
+Returns the total duration of the loaded audio in seconds.
+
+**Example**:
+```c
+double current = audio_elapsed_time();
+double total = audio_total_time();
+double progress = current / total;  // 0.0 to 1.0
+
+printf("Playback: %.2f / %.2f (%.1f%%)\n", current, total, progress * 100.0);
+```
+
+## Update Loop
+
+```c
+void audio_loop(void);
+```
+
+Must be called every frame to:
+- Update elapsed time tracking
+- Check for processed OpenAL buffers
+- Decode and queue more audio data
+- Maintain smooth streaming playback
+
+**Integration**:
+```c
+while (running) {
+    // Handle input...
+    
+    // Update audio streaming
+    audio_loop();
+    
+    // Sync lyrics to audio time
+    double current_time = audio_elapsed_time();
+    update_lyrics_position(current_time);
+    
+    // Render...
+}
+```
+
+<Info>
+  `audio_loop()` handles buffer management transparently. OpenAL typically uses multiple buffers (e.g., 3-4) for smooth streaming without gaps.
+</Info>
+
+## OpenAL Integration
+
+### Audio Device
+
+The audio system uses OpenAL for cross-platform audio output:
+- **Device**: Default audio output device
+- **Context**: OpenAL context for the device
+- **Source**: Single audio source for playback
+- **Buffers**: Multiple streaming buffers (typically 3-4)
+
+### Buffer Management
+
+Streaming workflow:
+1. Decode MP3 data into PCM samples
+2. Fill OpenAL buffers with PCM data
+3. Queue buffers to the audio source
+4. Monitor buffer processing
+5. Refill and re-queue processed buffers
+
+<Note>
+  Buffer underruns (when all buffers are processed before new data is queued) can cause audio stuttering. Call `audio_loop()` frequently enough to prevent this.
+</Note>
+
+## MP3 Decoding with minimp3
+
+### Decoder Features
+
+The system uses **minimp3** for MP3 decoding:
+- Single-file header-only library
+- Supports all MPEG versions (MPEG-1, MPEG-2, MPEG-2.5)
+- Handles all layer 3 variants
+- Low memory footprint
+- No external dependencies
+
+### Streaming Decoding
+
+The decoder operates in streaming mode:
+1. Read MP3 frames sequentially
+2. Decode frames to PCM samples
+3. Feed samples to OpenAL buffers
+4. Maintain decoder state for seeking
+
+<Info>
+  MP3 frame decoding is done on-demand during `audio_loop()`. Only enough frames to fill available buffers are decoded each frame.
+</Info>
+
+## Time Synchronization for Lyrics
+
+### Synchronization Strategy
+
+Lyrics synchronization relies on precise time tracking:
+
+```c
+// In game loop
+double audio_time = audio_elapsed_time();
+
+// Find current lyric line
+for (int i = 0; i < num_lyrics; i++) {
+    if (lyrics[i].timestamp <= audio_time && 
+        audio_time < lyrics[i].timestamp + lyrics[i].duration) {
+        // Display and animate this lyric
+        display_lyric(&lyrics[i], audio_time - lyrics[i].timestamp);
+        break;
+    }
+}
+```
+
+### Time Accuracy
+
+**`audio_elapsed_time()`** provides an **estimate** because:
+- OpenAL buffer processing is asynchronous
+- Frame decoding happens in discrete chunks
+- System audio latency varies by platform
+
+<Note>
+  For karaoke applications, time accuracy is typically sufficient for human perception. Sub-frame timing precision is not necessary.
+</Note>
+
+### Handling Seeks
+
+When seeking, update lyric display immediately:
+
+```c
+void handle_seek(double target_time) {
+    // Seek audio
+    audio_seek(target_time);
+    
+    // Find and display corresponding lyric
+    int lyric_index = find_lyric_at_time(target_time);
+    jump_to_lyric(lyric_index);
+}
+```
+
+## Error Handling
+
+The audio system does not return error codes. Critical errors (device initialization failure) will typically abort the program. Non-critical issues (buffer underruns) are handled silently.
+
+**Best practices**:
+- Verify audio file loads successfully by checking duration:
+  ```c
+  audio_load(data, size);
+  if (audio_total_time() <= 0.0) {
+      // Load failed
+  }
+  ```
+- Call `audio_loop()` consistently every frame
+- Handle `audio_is_paused()` state in UI updates
+
+## Thread Safety
+
+<Note>
+  The audio system is **not thread-safe**. All functions must be called from the **main thread**.
+</Note>
+
+OpenAL itself supports concurrent access, but the audio system's internal state is not synchronized.
+
+## Performance Considerations
+
+### CPU Usage
+
+- **Decoding**: Minimal CPU usage, minimp3 is highly optimized
+- **Buffer management**: Lightweight, only processes buffers as needed
+- **Memory**: Small footprint, only buffers a few seconds of audio
+
+### Buffer Configuration
+
+Typical configuration:
+- **Buffer size**: 16KB - 64KB per buffer
+- **Number of buffers**: 3-4 buffers
+- **Total buffered audio**: ~1-2 seconds
+
+This provides smooth playback while minimizing latency.
+
+## Example Usage
+
+### Complete Playback Flow
+
+```c
+// Initialize audio system
+audio_init();
+
+// Load MP3 file
+unsigned char *mp3_data = load_file("song.mp3", &file_size);
+audio_load(mp3_data, file_size);
+
+// Start playback
+audio_resume();
+
+// Main loop
+while (running) {
+    // Update audio streaming
+    audio_loop();
+    
+    // Get current time
+    double current = audio_elapsed_time();
+    double total = audio_total_time();
+    
+    // Update lyrics based on time
+    update_lyrics(current);
+    
+    // Handle pause/resume
+    if (pause_pressed) {
+        if (audio_is_paused()) {
+            audio_resume();
+        } else {
+            audio_pause();
+        }
+    }
+    
+    // Handle seeking
+    if (seek_requested) {
+        audio_seek(seek_target_time);
+    }
+    
+    // Render...
+}
+
+// Cleanup
+audio_finish();
+free(mp3_data);
+```
+
+### Progress Bar Example
+
+```c
+void render_progress_bar() {
+    double current = audio_elapsed_time();
+    double total = audio_total_time();
+    
+    if (total > 0.0) {
+        double progress = current / total;
+        
+        // Draw progress bar
+        Bounds_t bar_bounds = { 100, 500, 600 * progress, 10 };
+        render_draw_rounded_rect(null_texture, &bar_bounds, &color, 5.0f);
+        
+        // Display time
+        char time_str[32];
+        snprintf(time_str, sizeof(time_str), "%d:%02d / %d:%02d",
+                 (int)(current / 60), (int)current % 60,
+                 (int)(total / 60), (int)total % 60);
+        // Render time_str...
+    }
+}
+```

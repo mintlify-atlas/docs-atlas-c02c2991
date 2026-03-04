@@ -1,0 +1,265 @@
+---
+title: Visual Effect Options
+description: Configure visual effects and rendering options for the karaoke display
+---
+
+## Overview
+
+Etsuko provides extensive visual customization through the `KaraokeOpts_t` structure defined in `src/config.h`. These options control various visual effects, shadows, animations, and UI behaviors.
+
+<Warning>
+These are **compile-time configuration options**, not runtime toggles. Disabling features here prevents their data from being computed and resources from being allocated, making them impossible to enable during execution.
+</Warning>
+
+## KaraokeOpts Structure
+
+The complete structure from `src/config.h:13-34`:
+
+```c
+struct KaraokeOpts_t {
+    // Main song file name
+    OWNING char *song_file;
+    // Makes past lyrics fade away in karaoke mode
+    bool hide_past_lyrics;
+    // Enables shadow on the album art
+    bool draw_album_art_shadow;
+    // Enables shadow on the text for each lyric line
+    bool draw_lyric_shadow;
+    // Shows a loading screen while loading assets
+    bool show_loading_screen;
+    // Make the active line bigger than the inactive ones
+    bool enlarge_active_line;
+    // Enable the effect of filling characters when the song timings have support for it
+    bool enable_dynamic_fill;
+    // Enable the display of reading hints below lyric segments when the song has support for it
+    bool enable_reading_hints;
+    // Enable a "jumping" or pulsing effect that plays together with the dynamic fill effect
+    bool enable_pulse_effect;
+    // Time in seconds to hide optional ui elements after elapsed
+    double hide_ui_elements_delay_sec;
+};
+```
+
+## Visual Effect Options
+
+### Lyric Display Effects
+
+<ParamField path="hide_past_lyrics" type="bool" default="true">
+  Makes past lyrics fade away in karaoke mode, keeping focus on the current and upcoming lines.
+  
+  When enabled, lyrics that have already been sung gradually fade out, creating a cleaner, more focused viewing experience.
+</ParamField>
+
+<ParamField path="enlarge_active_line" type="bool" default="false">
+  Makes the currently active lyric line larger than inactive ones.
+  
+  This provides a clear visual indicator of which line is currently being sung, enhancing readability during performance.
+</ParamField>
+
+### Shadow Effects
+
+<ParamField path="draw_album_art_shadow" type="bool" default="true">
+  Enables shadow rendering on the album art display.
+  
+  Adds depth and visual separation between the album artwork and the background, improving overall aesthetics.
+</ParamField>
+
+<ParamField path="draw_lyric_shadow" type="bool" default="true">
+  Enables shadow rendering on each lyric line.
+  
+  Improves text readability by providing contrast, especially when lyrics are displayed over complex backgrounds or gradients.
+</ParamField>
+
+### Dynamic Fill Effect
+
+<ParamField path="enable_dynamic_fill" type="bool" default="true">
+  Enables the character-by-character fill animation effect when song timings support it.
+  
+  When enabled and the song file includes per-character timing data, individual characters fill with color as they're meant to be sung, similar to traditional karaoke systems.
+  
+  <Info>
+  This effect requires detailed timing information in the song file. Songs without character-level timings will not display this effect even when enabled.
+  </Info>
+</ParamField>
+
+<ParamField path="enable_pulse_effect" type="bool" default="true">
+  Enables a "jumping" or pulsing animation that plays together with the dynamic fill effect.
+  
+  <Note>
+  This effect **requires** `enable_dynamic_fill` to be `true`. The pulse effect enhances the dynamic fill by adding subtle motion to characters as they're sung.
+  </Note>
+</ParamField>
+
+### Reading Hints
+
+<ParamField path="enable_reading_hints" type="bool" default="true">
+  Enables the display of reading hints below lyric segments when the song includes them.
+  
+  Reading hints show pronunciation or transliteration under specific characters, particularly useful for:
+  - CJK (Chinese, Japanese, Korean) characters
+  - Non-Latin scripts
+  - Words with ambiguous pronunciations
+  
+  <Info>
+  Song files must include a `#readings` section for this feature to display anything. See the [Reading Hints](/song-format/reading-hints) page for details.
+  </Info>
+</ParamField>
+
+### UI Behavior
+
+<ParamField path="show_loading_screen" type="bool" default="true">
+  Displays a loading screen while assets (fonts, images, audio) are being loaded.
+  
+  Provides visual feedback to users during the initialization process, improving perceived responsiveness.
+</ParamField>
+
+<ParamField path="hide_ui_elements_delay_sec" type="double" default="2.0">
+  Time in seconds before optional UI elements automatically hide.
+  
+  After this delay without user interaction, non-essential UI elements fade away to provide an unobstructed view of the lyrics and album art.
+</ParamField>
+
+## Default Configuration
+
+The default visual options from `src/config.c:48-59`:
+
+```c
+config->karaoke = (struct KaraokeOpts_t) {
+    .song_file = strdup("tiny stars.txt"),
+    .hide_ui_elements_delay_sec = 2.0,
+    .enable_dynamic_fill = true,
+    .enable_reading_hints = true,
+    .enable_pulse_effect = true,
+    .hide_past_lyrics = true,
+    .draw_album_art_shadow = true,
+    .draw_lyric_shadow = true,
+    .show_loading_screen = true,
+    .enlarge_active_line = false,
+};
+```
+
+## Impact of Disabling Features
+
+Understanding the consequences of setting options to `false` is crucial:
+
+<Accordion title="No Runtime Toggle Available">
+  When a feature is disabled in the configuration:
+  - The necessary data structures are **not allocated**
+  - Required computations are **not performed**
+  - Related resources are **not loaded**
+  - The feature **cannot be enabled** during program execution
+  
+  This is fundamentally different from runtime preferences that can be toggled on/off.
+</Accordion>
+
+<Accordion title="Performance Benefits">
+  Disabling unused features provides:
+  - **Reduced memory usage** - No allocation for disabled features
+  - **Faster loading times** - Fewer resources to initialize
+  - **Better performance** - No computation overhead for disabled effects
+  - **Smaller resource footprint** - Especially important for web builds
+</Accordion>
+
+<Accordion title="Example: Dynamic Fill Disabled">
+  If `enable_dynamic_fill = false`:
+  
+  - Character-level timing data is not parsed from song files
+  - Fill animation data structures are not created
+  - Rendering code for character filling is skipped
+  - The pulse effect also becomes unavailable (depends on dynamic fill)
+  - No way to enable the effect without recompiling
+</Accordion>
+
+<Accordion title="Example: Reading Hints Disabled">
+  If `enable_reading_hints = false`:
+  
+  - The `#readings` section in song files is ignored
+  - Reading hint positioning calculations are not performed
+  - Text rendering for hints is not initialized
+  - Memory for hint storage is not allocated
+  - Users cannot toggle hints on, even if song files include them
+</Accordion>
+
+## Configuration vs Preferences
+
+From the README (`src/README.md:190-202`):
+
+> Setting some of these options to false will prevent the necessary data for their function from being computed and the resources for them allocated at all, which makes it impossible for it to be toggled during execution. It's essentially hard-disabling parts of the application.
+
+### Configuration (This Page)
+- **When**: Compile-time only
+- **Purpose**: Control feature availability
+- **Impact**: Affects resource allocation and data generation
+- **Change requires**: Rebuilding the application
+
+### Runtime Preferences (Future)
+- **When**: During program execution
+- **Purpose**: Control feature visibility
+- **Impact**: Show/hide features that are enabled
+- **Change requires**: User action only
+- **Persistence**: Can be saved to preferences file or browser storage
+
+<Info>
+Runtime preferences can only toggle features that are **enabled** in the configuration. If a feature is disabled in config, no preference toggle can activate it.
+</Info>
+
+## Modifying Visual Options
+
+To change visual effect settings:
+
+1. Edit `src/config.c` in the `get_default_config()` function
+2. Modify the desired boolean flags or numeric values
+3. Rebuild the application using CMake
+4. Run the application to see your changes
+
+### Example: Minimal Configuration
+
+For a minimal, performance-focused configuration:
+
+```c
+config->karaoke = (struct KaraokeOpts_t) {
+    .song_file = strdup("my_song.txt"),
+    .hide_ui_elements_delay_sec = 3.0,
+    .enable_dynamic_fill = false,      // Disable character fill
+    .enable_reading_hints = false,     // Disable reading hints
+    .enable_pulse_effect = false,      // Disable pulse effect
+    .hide_past_lyrics = false,         // Keep all lyrics visible
+    .draw_album_art_shadow = false,    // Disable shadows for performance
+    .draw_lyric_shadow = false,        // Disable text shadows
+    .show_loading_screen = true,       // Keep loading feedback
+    .enlarge_active_line = true,       // Visual focus on active line
+};
+```
+
+### Example: Maximum Visual Effects
+
+For the richest visual experience:
+
+```c
+config->karaoke = (struct KaraokeOpts_t) {
+    .song_file = strdup("my_song.txt"),
+    .hide_ui_elements_delay_sec = 1.5,
+    .enable_dynamic_fill = true,       // Character-by-character fill
+    .enable_reading_hints = true,      // Show pronunciation hints
+    .enable_pulse_effect = true,       // Animated character pulse
+    .hide_past_lyrics = true,          // Fade away past lyrics
+    .draw_album_art_shadow = true,     // Album art depth
+    .draw_lyric_shadow = true,         // Text shadows for readability
+    .show_loading_screen = true,       // Loading feedback
+    .enlarge_active_line = true,       // Emphasize current line
+};
+```
+
+## Performance Considerations
+
+<Note>
+For web builds or lower-end devices, consider disabling resource-intensive effects like dynamic fill and pulse animations to improve performance.
+</Note>
+
+Effects ranked by performance impact (highest to lowest):
+1. **Dynamic fill + pulse effect** - Most computationally expensive
+2. **Lyric shadows** - Requires additional rendering passes
+3. **Album art shadow** - Additional texture operations
+4. **Reading hints** - Extra text rendering and positioning
+5. **Enlarge active line** - Minimal impact, just scale transform
+6. **Hide past lyrics** - Negligible impact, just opacity changes

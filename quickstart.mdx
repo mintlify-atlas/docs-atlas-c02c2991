@@ -1,80 +1,528 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get Etsuko running on your machine in minutes
 ---
 
-## Get started in three steps
+## Prerequisites
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
+Before building Etsuko, ensure you have the following installed:
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="All platforms">
+    - **CMake** 3.14 or higher
+    - **Ninja** build system
+    - **C compiler** with C23 support (Clang recommended)
+    - **Git** for cloning the repository
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+
+  <Accordion title="Linux">
+    Install dependencies using your package manager:
+
+    **Ubuntu/Debian:**
+    ```bash
+    sudo apt install cmake ninja-build clang libglew-dev libglfw3-dev libopenal-dev libssl-dev
+    ```
+
+    **Fedora/RHEL:**
+    ```bash
+    sudo dnf install cmake ninja-build clang glew-devel glfw-devel openal-soft-devel openssl-devel
+    ```
+
+    **Arch Linux:**
+    ```bash
+    sudo pacman -S cmake ninja clang glew glfw-wayland openal openssl
+    ```
+  </Accordion>
+
+  <Accordion title="macOS">
+    Install dependencies using Homebrew:
+    ```bash
+    brew install cmake ninja llvm glew glfw openal-soft openssl
+    ```
+
+    macOS includes OpenGL by default.
+  </Accordion>
+
+  <Accordion title="Windows">
+    Use vcpkg for dependency management:
+
+    1. Install vcpkg:
+    ```bash
+    git clone https://github.com/Microsoft/vcpkg.git
+    cd vcpkg
+    ./bootstrap-vcpkg.bat
+    ```
+
+    2. Set the environment variable:
+    ```bash
+    set VCPKG_ROOT=C:\path\to\vcpkg
+    ```
+
+    Dependencies will be automatically installed during the CMake configuration step.
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+## Clone the repository
+
+<Steps>
+  <Step title="Clone Etsuko">
+    Clone the repository to your local machine:
+
+    ```bash
+    git clone https://github.com/yourusername/etsuko.git
+    cd etsuko
+    ```
+
+    <Note>
+      Replace `yourusername` with the actual repository owner's GitHub username.
+    </Note>
+  </Step>
+
+  <Step title="Verify directory structure">
+    Ensure you have the correct structure:
+
+    ```bash
+    ls -la
+    ```
+
+    You should see:
+    - `CMakeLists.txt` - Main build configuration
+    - `CMakePresets.json` - Build presets for different platforms
+    - `src/` - Source code directory
+    - `assets/` - Default assets (fonts)
+    - `README.md` - Documentation
+  </Step>
+</Steps>
+
+## Install dependencies
+
+Choose your installation method based on your platform:
+
+<Tabs>
+  <Tab title="System libraries (Linux/macOS)">
+    Dependencies should already be installed from the Prerequisites step. Verify by checking for the libraries:
+
+    ```bash
+    pkg-config --modversion glfw3 glew openal
+    ```
+
+    If successful, you'll see version numbers for each library.
+  </Tab>
+
+  <Tab title="vcpkg (Windows/cross-platform)">
+    Etsuko includes a `vcpkg.json` manifest that automatically installs dependencies:
+
+    **Dependencies defined:**
+    - glfw3 (windowing)
+    - openal-soft (audio)
+    - glew (OpenGL extensions)
+    - openssl (HTTPS support)
+    - opengl (Windows only)
+
+    Set the vcpkg root environment variable:
+
+    ```bash
+    export VCPKG_ROOT=/path/to/vcpkg  # Linux/macOS
+    set VCPKG_ROOT=C:\path\to\vcpkg   # Windows
+    ```
+
+    Dependencies will install automatically during configuration.
+  </Tab>
+</Tabs>
+
+## Build the application
+
+Etsuko uses CMake presets for streamlined building:
+
+<Steps>
+  <Step title="Configure the build">
+    Choose a preset based on your needs:
+
+    <CodeGroup>
+    ```bash Desktop Release (Recommended)
+    cmake --preset desktop-release
+    ```
+
+    ```bash Desktop Debug (with ASan)
+    cmake --preset desktop-debug
+    ```
+
+    ```bash vcpkg Release (Windows)
+    cmake --preset vcpkg-release
+    ```
+
+    ```bash vcpkg Debug
+    cmake --preset vcpkg-debug
+    ```
+    </CodeGroup>
+
+    This generates build files in the `build/` directory using the Ninja generator.
+
+    <Info>
+      The desktop-debug preset enables AddressSanitizer (ASan) for memory debugging, which adds performance overhead. Use desktop-release for regular usage.
+    </Info>
+  </Step>
+
+  <Step title="Build the executable">
+    Compile the application using the same preset:
+
+    ```bash
+    cmake --build --preset desktop-release
+    ```
+
+    The build process:
+    1. Compiles all C source files from `src/`
+    2. Links against GLFW, GLEW, OpenAL, OpenGL, and OpenSSL
+    3. Copies `assets/` directory to the build output
+    4. Copies `assets_dbg/` if it exists (for local song files)
+    5. Generates the `etsuko` executable
+
+    Build output location: `build/desktop-release/etsuko`
+  </Step>
+
+  <Step title="Verify the build">
+    Check that the executable was created:
+
+    ```bash
+    ls -lh build/desktop-release/
+    ```
+
+    You should see:
+    - `etsuko` - The main executable
+    - `assets/` - Copied asset directory with fonts
+  </Step>
+</Steps>
+
+## First run
+
+<Steps>
+  <Step title="Navigate to build directory">
+    The application expects to run from its build directory:
+
+    ```bash
+    cd build/desktop-release
+    ```
+
+    <Warning>
+      Running from a different directory will cause asset loading failures. The application looks for `assets/` relative to the executable location.
+    </Warning>
+  </Step>
+
+  <Step title="Run Etsuko">
+    Launch the application:
+
+    ```bash
+    ./etsuko
+    ```
+
+    On first run, Etsuko will:
+    1. Initialize OpenGL and create a window
+    2. Load fonts from `assets/`
+    3. Attempt to load the default song or show the menu
+
+    <Info>
+      The default operating mode is `APP_MODE_MENU` which shows a song selection interface. If no songs are available, you'll see an empty menu.
+    </Info>
+  </Step>
+
+  <Step title="Expected behavior">
+    **Menu mode (default):**
+    - Displays an empty song list (no songs configured yet)
+    - UI controls appear at the bottom
+    - Background gradient renders
+
+    **Karaoke mode (if configured):**
+    - Attempts to load the song file specified in `config.c:49`
+    - Default: `"tiny stars.txt"`
+    - Application will exit if the song file is missing
+
+    <Note>
+      To play songs, you need to create song files in the custom Etsuko format. Continue to the next section to learn how.
+    </Note>
+  </Step>
+</Steps>
+
+## Creating your first song file
+
+Song files use a text-based format with metadata, timings, and lyrics.
+
+<Steps>
+  <Step title="Create the assets_dbg directory">
+    This directory is for local development and not tracked by git:
+
+    ```bash
+    # From the repository root
+    mkdir -p assets_dbg/img
+    mkdir -p assets_dbg/audio
+    ```
+
+    The build system automatically copies `assets_dbg/` contents to the output directory.
+  </Step>
+
+  <Step title="Prepare your media files">
+    You'll need:
+    - **Audio file**: MP3 format (e.g., `my_song.mp3`)
+    - **Album art**: JPEG format (e.g., `album_art.jpg`)
+
+    Place them in the appropriate directories:
+    ```bash
+    cp /path/to/song.mp3 assets_dbg/audio/
+    cp /path/to/album.jpg assets_dbg/img/
+    ```
+  </Step>
+
+  <Step title="Create a song definition file">
+    Create `assets_dbg/my_first_song.txt` with the following structure:
+
+    ```text
+    name=My First Song
+    artist=Example Artist
+    album=Example Album
+    year=2026
+    albumArt=img/album_art.jpg
+    filePath=audio/my_song.mp3
+    alignment=center
+    offset=0.0
+    bgColor=2E3440
+    bgColorSecondary=4C566A
+    bgType=simpleGradient
+    #timings
+    0:00
+    0:05
+    0:10
+    0:15
+    #lyrics
+
+    First line of lyrics
+    Second line here
+    Third line continues
+    Final line ends
+    ```
+
+    <Accordion title="Format explanation">
+    **Header section:**
+    - `name`, `artist`, `album` - Song metadata
+    - `albumArt` - Path relative to `assets/` directory
+    - `filePath` - Audio file path relative to `assets/`
+    - `alignment` - Text alignment: `left`, `center`, or `right`
+    - `offset` - Time offset in seconds to sync lyrics
+    - `bgColor` / `bgColorSecondary` - Hex colors (without `#`)
+    - `bgType` - Background effect: `simpleGradient`, `solid`, `amLikeGradient`, `cloudGradient`
+
+    **Timings section:**
+    - One timestamp per line in `MM:SS` or `MM:SS.ms` format
+    - Must have exactly one timing per lyric line
+    - Must appear before `#lyrics`
+
+    **Lyrics section:**
+    - One line of text per timing
+    - Blank lines are allowed for instrumental sections
+    - Special modifiers can be added inline (e.g., `text#alignment=right`)
+    </Accordion>
+  </Step>
+
+  <Step title="Configure Etsuko to use your song">
+    Edit `src/config.c:49` to set your song as the default:
+
+    ```c
+    config->karaoke = (struct KaraokeOpts_t) {
+        .song_file = strdup("my_first_song.txt"),  // Changed from "tiny stars.txt"
+        .hide_ui_elements_delay_sec = 2.0,
+        .enable_dynamic_fill = true,
+        .enable_reading_hints = true,
+        .enable_pulse_effect = true,
+        .hide_past_lyrics = true,
+        .draw_album_art_shadow = true,
+        .draw_lyric_shadow = true,
+        .show_loading_screen = true,
+        .enlarge_active_line = false,
+    };
+    ```
+
+    <Note>
+      Configuration changes require rebuilding the application. Run `cmake --build --preset desktop-release` again.
+    </Note>
+  </Step>
+
+  <Step title="Set karaoke mode as default">
+    In `src/config.c:46`, change the operating mode:
+
+    ```c
+    config->op_mode = APP_MODE_KARAOKE;  // Changed from APP_MODE_MENU
+    ```
+
+    This tells Etsuko to immediately load your song instead of showing the menu.
+  </Step>
+
+  <Step title="Rebuild and test">
+    Rebuild the application to apply configuration changes:
+
+    ```bash
+    cmake --build --preset desktop-release
+    cd build/desktop-release
+    ./etsuko
+    ```
+
+    Etsuko should now:
+    1. Load your song file
+    2. Display the album art
+    3. Show synchronized lyrics as the song plays
+    4. Apply the background gradient using your chosen colors
+
+    <Warning>
+      If the application exits immediately, check that:
+      - Your song file path matches exactly (including `.txt` extension)
+      - Audio and image files exist at the specified paths
+      - The `assets_dbg/` directory was copied to `build/desktop-release/assets/`
+    </Warning>
+  </Step>
+</Steps>
+
+## Advanced song features
+
+### Segment-level timing
+
+For character-by-character or syllable-level synchronization, use ASS format:
+
+```text
+name=Advanced Song
+artist=Artist
+album=Album
+albumArt=img/album.jpg
+filePath=audio/song.mp3
+#ass
+Dialogue: 0,0:00:00.00,0:00:05.75,Default,,0,0,0,,
+Dialogue: 0,0:00:05.75,0:00:13.10,Default,,0,0,0,,First line of the song
+Dialogue: 0,0:00:13.10,0:00:17.00,Default,,0,0,0,,Second line here
+```
+
+<Info>
+  Export ASS subtitle files from [Aegisub](https://aegisub.org/) and copy only the `[Events]` section (excluding the `Format:` line) into the `#ass` section.
+</Info>
+
+### Reading hints
+
+Add pronunciation guides for non-Latin scripts:
+
+```text
+#lyrics
+
+歌詞の例
+もう一行
+#readings
+
+歌=か,詞=し,例=れい
+もう=mou,一=いち,行=ぎょう
+```
+
+Reading hints appear in smaller text below the corresponding characters when `enable_reading_hints` is enabled in the configuration.
+
+### Per-line customization
+
+Modify individual lines with inline directives:
+
+```text
+#lyrics
+
+Centered text
+Right-aligned text#alignment=right
+Back to default alignment
+```
+
+## Building for the web
+
+To create a WebAssembly build for browsers:
+
+<Steps>
+  <Step title="Install Emscripten SDK">
+    ```bash
+    git clone https://github.com/emscripten-core/emsdk.git
+    cd emsdk
+    ./emsdk install latest
+    ./emsdk activate latest
+    source ./emsdk_env.sh
+    ```
+  </Step>
+
+  <Step title="Configure and build">
+    ```bash
+    cmake --preset wasm-release
+    cmake --build --preset wasm-release
+    ```
+
+    Output files in `build/wasm-release/`:
+    - `etsuko.html` - Entry point
+    - `etsuko.js` - JavaScript glue code
+    - `etsuko.wasm` - WebAssembly binary
+  </Step>
+
+  <Step title="Run locally with emrun">
+    ```bash
+    cd build/wasm-release
+    emrun ./etsuko.html
+    ```
+
+    This starts a local HTTP server (required for WASM loading).
+  </Step>
+</Steps>
+
+<Note>
+  The web build requires defining `CDN_BASE_PATH` in a `secret.h` file for loading remote assets. Point it to your asset server or use `localhost` for local testing.
+</Note>
+
+## Troubleshooting
 
 <AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Accordion title="Application exits immediately">
+    **Cause**: Missing song file or assets
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    **Solution**: 
+    1. Verify the song file exists: `ls build/desktop-release/assets/`
+    2. Check the `song_file` path in `config.c` matches exactly
+    3. Ensure `assets_dbg/` was copied during build
+  </Accordion>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
+  <Accordion title="CMake can't find dependencies">
+    **Cause**: Libraries not installed or not in search path
+
+    **Solution**:
+    - Linux/macOS: Install system packages or use vcpkg
+    - Windows: Use vcpkg and set `VCPKG_ROOT` environment variable
+    - Verify with: `pkg-config --modversion glfw3 glew openal`
+  </Accordion>
+
+  <Accordion title="Black screen or no lyrics">
+    **Cause**: OpenGL context creation failed or song parsing error
+
+    **Solution**:
+    1. Check OpenGL support: `glxinfo | grep "OpenGL version"` (Linux)
+    2. Run with debug preset for detailed error messages
+    3. Verify song file format (timings before lyrics, correct section markers)
+  </Accordion>
+
+  <Accordion title="Audio plays but no lyrics sync">
+    **Cause**: Timing offset or incorrect timestamp format
+
+    **Solution**:
+    - Adjust the `offset` field in your song file (try `±0.5` seconds)
+    - Ensure timings use `MM:SS.ms` format (e.g., `0:05.5` not `5.5`)
+    - Verify timing count matches lyric line count
   </Accordion>
 </AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Song format reference" icon="file-lines" href="/song-format/overview">
+    Complete guide to the Etsuko song format
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/settings">
+    Customize visual effects and behavior
+  </Card>
+  <Card title="Building from source" icon="code" href="/building/desktop-build">
+    Advanced build options and cross-compilation
+  </Card>
+  <Card title="Web deployment" icon="globe" href="/building/web-build">
+    Deploy Etsuko as a web application
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,373 @@
+---
+title: Advanced Features
+description: Sub-timings, background effects, dynamic fill, and advanced customization
+---
+
+Etsuko supports several advanced features for creating professional karaoke experiences with precise control over visual effects and timing.
+
+## Sub-Timings (Karaoke Effect)
+
+Sub-timings enable syllable-by-syllable or word-by-word highlighting as the song plays, creating the classic "bouncing ball" karaoke effect.
+
+### Defining Sub-Timings
+
+Sub-timings are only available when using the `#ass` format with the `\k` tag:
+
+```txt
+Dialogue: 0,0:00:05.75,0:00:13.10,Default,,0,0,0,,{\k75}First {\k125}line {\k235}of {\k100}the {\k200}song
+```
+
+The number after `\k` represents duration in **centiseconds** (1/100 second):
+- `{\k75}` = 0.75 seconds
+- `{\k125}` = 1.25 seconds
+
+This creates 5 segments that will highlight progressively:
+1. "First" highlights for 0.75s
+2. "line" highlights for 1.25s
+3. "of" highlights for 2.35s
+4. "the" highlights for 1.00s
+5. "song" highlights for 2.00s
+
+### Dynamic Fill Effect
+
+<Info>
+  Sub-timings enable the **dynamic fill** effect, where text progressively fills with color as the song plays, providing precise visual feedback.
+</Info>
+
+The dynamic fill has two modes:
+- **Linear**: Fills progressively from left to right within each segment
+- **Full-word**: Entire segments light up when reached
+
+### Automatic Sub-Timing
+
+For songs without explicit sub-timings, you can enable automatic full-line sub-timing:
+
+```txt
+assumeFullSubTiming=yes
+```
+
+This adds a single sub-timing spanning the entire line duration, enabling the linear dynamic fill effect.
+
+<Accordion title="How assumeFullSubTiming works">
+  From the source code:
+  
+  ```c
+  // song.c:189-195
+  if ( song->assume_full_sub_timing_when_absent ) {
+      Song_LineTiming_t *timing = &line->timings[line->num_timings++];
+      timing->duration = line->base_duration;
+      timing->start_idx = 0;
+      timing->end_idx = (int32_t)len;
+      timing->cumulative_duration = 0;
+  }
+  ```
+  
+  When no sub-timings are found, the system creates a single timing segment covering the entire line.
+</Accordion>
+
+## Background Types and Effects
+
+Etsuko supports multiple background rendering modes with varying levels of complexity.
+
+### Static Backgrounds
+
+<ParamField path="solid" type="bgType">
+  Solid color background using the `bgColor` field.
+  
+  ```txt
+  bgColor=972566
+  bgType=solid
+  ```
+</ParamField>
+
+<ParamField path="simpleGradient" type="bgType">
+  Linear gradient between `bgColor` and `bgColorSecondary`.
+  
+  ```txt
+  bgColor=972566
+  bgColorSecondary=000000
+  bgType=simpleGradient
+  ```
+</ParamField>
+
+### Animated Gradient Backgrounds
+
+These backgrounds use GPU shaders for smooth animated effects:
+
+<ParamField path="sands" type="bgType">
+  Animated sand dunes gradient effect.
+  
+  ```txt
+  bgType=sands
+  ```
+</ParamField>
+
+<ParamField path="randomGradient" type="bgType">
+  Randomized gradient pattern.
+  
+  ```txt
+  bgType=randomGradient
+  ```
+</ParamField>
+
+<ParamField path="amLike" type="bgType">
+  Apple Music-like animated gradient effect.
+  
+  ```txt
+  bgType=amLike
+  ```
+  
+  <Note>
+    Uses shader code based on work by Inigo Quilez, licensed under CC BY-NC-SA 3.0.
+  </Note>
+</ParamField>
+
+<ParamField path="cloud" type="bgType">
+  Cloud-like animated gradient effect.
+  
+  ```txt
+  bgType=cloud
+  ```
+</ParamField>
+
+### Background Type Enum
+
+From the source code:
+
+```c
+// song.h:34-41
+typedef enum Song_BgType_t {
+    BG_SIMPLE_GRADIENT = 0,
+    BG_SOLID,
+    BG_SANDS_GRADIENT,
+    BG_RANDOM_GRADIENT,
+    BG_AM_LIKE_GRADIENT,
+    BG_CLOUD_GRADIENT,
+} Song_BgType_t;
+```
+
+## Color Sampling from Album Art
+
+Instead of manually specifying colors, you can enable automatic color sampling from the album artwork for dynamic theming.
+
+<Info>
+  The application can extract dominant colors from your album art image and use them for `bgColor` and `bgColorSecondary`, creating a cohesive visual theme.
+</Info>
+
+This feature is controlled by the application configuration, not the song file itself.
+
+## Font Overrides
+
+Custom fonts can be specified per-song to support special characters or achieve a specific visual style.
+
+```txt
+fontOverride=fonts/NotoSansCJK-Bold.ttf
+```
+
+<Accordion title="When to use font overrides">
+  **Language Support:**
+  - CJK characters (Chinese, Japanese, Korean)
+  - Arabic, Hebrew, Devanagari, etc.
+  - Extended Latin scripts with special diacritics
+  
+  **Stylistic Choices:**
+  - Handwritten fonts for a personal touch
+  - Bold fonts for better readability
+  - Decorative fonts matching the song's theme
+  
+  The default font is Noto Sans, which has good coverage but may not include all glyphs for every language.
+</Accordion>
+
+## Custom Modifiers per Line
+
+Individual lyric lines can override global settings using inline modifiers.
+
+### Alignment Override
+
+```txt
+This line is centered#alignment=center
+This line is right-aligned 右#alignment=right
+Back to default alignment
+```
+
+### Modifier Implementation
+
+From the source code:
+
+```c
+// song.c:94-120
+static void read_lyrics_opts(Song_Line_t *line, const char *opts) {
+    const char *comma = strchr(opts, ',');
+    const size_t end = comma == NULL ? strlen(opts) : comma - opts;
+
+    if ( end == 0 )
+        return;
+
+    const char *equals = strchr(opts, '=');
+    if ( equals != NULL ) {
+        if ( str_equals_sized(opts, "alignment", equals - opts) ) {
+            equals = equals + 1;
+            if ( str_equals_right_sized(equals, "left") ) {
+                line->alignment = SONG_LINE_LEFT;
+            } else if ( str_equals_right_sized(equals, "center") ) {
+                line->alignment = SONG_LINE_CENTER;
+            } else if ( str_equals_right_sized(equals, "right") ) {
+                line->alignment = SONG_LINE_RIGHT;
+            }
+        }
+    }
+
+    if ( comma != NULL ) {
+        read_lyrics_opts(line, comma + 1);
+    }
+}
+```
+
+Modifiers use a recursive parser to handle comma-separated options.
+
+### Future Modifier Support
+
+The modifier system is extensible. While currently only `alignment` is implemented, the infrastructure supports adding more per-line customizations like:
+- Font size adjustments
+- Color overrides
+- Animation styles
+- Text effects
+
+## Configuration Flags
+
+Some advanced features are controlled by compile-time configuration in `config.c`.
+
+### Dynamic Fill
+
+From the README:
+
+> Some options are available in the config.c file... Some of these options control the presence or not of certain features that some may consider undesirable, like the dynamic fill and pulse effect (which depends on the dynamic fill being enabled).
+
+<Warning>
+  These config flags are **compile-time only**. Setting them to false prevents the necessary data from being computed at all, making it impossible to toggle during execution.
+</Warning>
+
+### Runtime vs Compile-Time Options
+
+**Compile-time (config.c):**
+- Enable/disable dynamic fill
+- Enable/disable pulse effects
+- Memory and resource allocation decisions
+
+**Runtime (can be toggled):**
+- Show/hide reading hints
+- Background effect intensity
+- UI element visibility
+
+<Accordion title="Why two types of configuration?">
+  From the README:
+  
+  > Setting some of these options to false will prevent the necessary data for their function from being computed and the resources for them allocated at all, which makes it impossible for it to be toggled during execution. It's essentially hard-disabling parts of the application.
+  > 
+  > Although the same isn't true yet even for the config itself, these runtime toggles can have saved states in the future that live in a preferences file or the browser's local storage.
+  
+  Compile-time flags optimize performance by not computing data that will never be used. Runtime toggles provide flexibility without the memory/CPU overhead.
+</Accordion>
+
+## Advanced Example
+
+Here's a complex song file demonstrating multiple advanced features:
+
+```txt
+name=未来への道 (Path to the Future)
+translatedName=Path to the Future
+artist=山田 花子
+album=Journey Collection
+year=2024
+albumArt=img/yamada/future.jpg
+filePath=audio/yamada/mirai_michi.mp3
+alignment=center
+offset=-0.15
+bgColor=4A90E2
+bgColorSecondary=1A3A5C
+bgType=amLike
+fontOverride=fonts/NotoSansJP-Bold.ttf
+assumeFullSubTiming=yes
+language=ja
+writtenBy=Translated and timed by User123
+#ass
+Dialogue: 0,0:00:00.00,0:00:03.50,Default,,0,0,0,,
+Dialogue: 0,0:00:03.50,0:00:10.20,Default,,0,0,0,,{\k120}未{\k130}来{\k110}へ{\k80}の{\k210}道
+Dialogue: 0,0:00:10.20,0:00:16.80,Default,,0,0,0,,{\k150}歩{\k130}き{\k180}続{\k140}け{\k80}る#alignment=right
+Dialogue: 0,0:00:16.80,0:00:23.00,Default,,0,0,0,,{\k100}希{\k120}望{\k90}を{\k130}胸{\k150}に
+Dialogue: 0,0:00:23.00,0:00:30.50,Default,,0,0,0,,{\k180}光{\k160}を{\k190}求{\k140}め{\k180}て
+#readings
+
+未来=みらい,道=みち
+歩=ある,続=つづ
+希望=きぼう,胸=むね
+光=ひかり,求=もと
+```
+
+This example includes:
+- Japanese lyrics with furigana reading hints
+- Sub-timings for karaoke effect
+- Animated Apple Music-like background
+- Custom Japanese font
+- Automatic full sub-timing for lines without explicit sub-timings
+- Mixed alignment (one line right-aligned)
+- Negative offset for fine-tuned synchronization
+- Complete metadata with translated name and credits
+
+## Performance Considerations
+
+### GPU Shader Backgrounds
+
+Animated backgrounds like `amLike` and `cloud` use GPU shaders:
+
+<Warning>
+  - Requires OpenGL ES 3.0 / WebGL 2 support
+  - May impact performance on low-end devices
+  - Consider using `simpleGradient` or `solid` for better compatibility
+</Warning>
+
+### Sub-Timing Limits
+
+From the source code:
+
+```c
+// song.h:14
+#define MAX_TIMINGS_PER_LINE (24)
+```
+
+Each lyric line can have up to **24 sub-timing segments**. Exceeding this will cause an error:
+
+```c
+// song.c:218-220
+if ( line->num_timings >= MAX_TIMINGS_PER_LINE ) {
+    error_abort("Number of max timings per line exceeded. Maybe consider increasing this number");
+}
+```
+
+<Info>
+  24 segments is usually sufficient for syllable-level timing in most languages. If you need more, the limit can be increased by recompiling with a higher `MAX_TIMINGS_PER_LINE` value.
+</Info>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Start simple, add complexity">
+    Begin with basic `#timings` + `#lyrics`. Add sub-timings, reading hints, and advanced backgrounds only when needed.
+  </Accordion>
+  
+  <Accordion title="Test on target devices">
+    Animated backgrounds and complex sub-timings may perform differently on desktop vs. web vs. mobile. Test your songs on the platforms your audience will use.
+  </Accordion>
+  
+  <Accordion title="Use meaningful sub-timings">
+    Don't add sub-timings just because you can. They should match natural syllable boundaries or musical phrasing for the best user experience.
+  </Accordion>
+  
+  <Accordion title="Choose backgrounds that complement">
+    Background effects should enhance, not distract from, the lyrics. Match the background style to the song's mood and energy.
+  </Accordion>
+  
+  <Accordion title="Profile color choices">
+    If not using album art color sampling, ensure your color choices provide good contrast for text readability.
+  </Accordion>
+</AccordionGroup>

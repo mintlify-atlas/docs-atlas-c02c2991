@@ -1,0 +1,135 @@
+---
+title: Song Format Overview
+description: Understanding the Etsuko song format structure and requirements
+---
+
+The Etsuko karaoke application uses a custom text-based format for defining songs, lyrics, and timing information. This format is designed to be human-readable and easy to edit by hand.
+
+## Required Files
+
+Every song requires three files to function properly:
+
+<ParamField path="song_name.txt" type="file" required>
+  The main song definition file containing metadata, lyrics, and timing information
+</ParamField>
+
+<ParamField path="album_art.jpg" type="image" required>
+  Album artwork image (path specified in the .txt file via `albumArt` field)
+</ParamField>
+
+<ParamField path="song_audio.mp3" type="audio" required>
+  Audio file for the song (path specified in the .txt file via `filePath` field)
+</ParamField>
+
+<Info>
+  All files are expected to be inside the `assets/` folder during runtime. Relative paths (e.g., `files/`, `img/`) only work in the WebAssembly target.
+</Info>
+
+## File Structure
+
+A song file is divided into distinct sections, each serving a specific purpose:
+
+### Header Section
+
+The header contains metadata fields like song name, artist, album, colors, and file paths. Each field follows the format `key=value`.
+
+### Section Markers
+
+Sections are marked with a `#` prefix:
+
+- **`#timings`** - Timestamp markers for each lyric line
+- **`#lyrics`** - The actual lyric text
+- **`#ass`** - Alternative timing using Aegisub subtitle format
+- **`#readings`** - Reading hints for CJK characters
+
+<Note>
+  You must use **either** the combination of `#timings` and `#lyrics` **OR** the `#ass` section. The `#timings` section must come before `#lyrics` when using that approach.
+</Note>
+
+## Basic Example
+
+Here's a minimal song file demonstrating the structure:
+
+```txt
+name=My song
+albumArt=img/album.jpg
+filePath=files/song.mp3
+artist=John Doe
+album=Album
+alignment=center
+offset=0.3
+bgColor=972566
+bgColorSecondary=000000
+bgType=simpleGradient
+#timings
+0:00
+0:05
+0:13.1
+#lyrics
+
+First line of the song
+And the second one
+```
+
+## Timing Methods
+
+### Method 1: Simple Timings
+
+The simplest approach uses `#timings` followed by `#lyrics`. Each timestamp in the timings section corresponds to when the lyric line at that position should appear.
+
+```txt
+#timings
+0:00
+0:05.75
+0:13.10
+#lyrics
+
+First line of the song
+And the second one
+```
+
+<Info>
+  The first line after `#lyrics` is typically empty, representing the moment before lyrics begin.
+</Info>
+
+### Method 2: Aegisub Format
+
+For more precise control, use the `#ass` section with Aegisub subtitle timing:
+
+```txt
+#ass
+Dialogue: 0,0:00:00.00,0:00:05.75,Default,,0,0,0,,
+Dialogue: 0,0:00:05.75,0:00:13.10,Default,,0,0,0,,First line of the song
+Dialogue: 0,0:00:13.10,0:00:17.00,Default,,0,0,0,,And the second one
+```
+
+<Warning>
+  Only include the Dialogue lines from the [Events] section of a .ass file. Do not include the Format: line or any other headers.
+</Warning>
+
+## Inline Modifiers
+
+Individual lyric lines can have custom modifiers applied using the `#` character:
+
+```txt
+And the second one 光#alignment=right
+```
+
+This applies right alignment to this specific line, overriding the global alignment setting.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Metadata Fields" icon="tags" href="./metadata">
+    Learn about all available header fields and their values
+  </Card>
+  <Card title="Lyrics & Timings" icon="clock" href="./lyrics-timings">
+    Master timing synchronization and lyric formatting
+  </Card>
+  <Card title="Reading Hints" icon="language" href="./reading-hints">
+    Add pronunciation guides for CJK characters
+  </Card>
+  <Card title="Advanced Features" icon="wand-magic-sparkles" href="./advanced">
+    Explore sub-timings, backgrounds, and dynamic effects
+  </Card>
+</CardGroup>

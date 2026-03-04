@@ -1,0 +1,175 @@
+---
+title: Introduction
+description: A real-time karaoke application with synchronized lyrics, custom song formats, and OpenGL rendering
+---
+
+## What is Etsuko?
+
+Etsuko is a real-time karaoke application that displays synchronized lyrics as songs play, featuring a music player interface inspired by Apple Music's fullscreen player. Built with C and OpenGL, it supports both desktop and web platforms through WebAssembly.
+
+<Info>
+  Try the live demo at [karaoke.wooby.moe](https://karaoke.wooby.moe/) to see Etsuko in action. The demo runs entirely in your browser using WebAssembly and WebGL 2.
+</Info>
+
+## Key features
+
+### Real-time lyrics synchronization
+
+Etsuko displays lyrics in perfect sync with audio playback, supporting multiple synchronization methods:
+
+- **Line-based timing** - Simple timings for each lyric line
+- **Segment-based timing** - Character, syllable, or word-level precision with up to 24 timings per line
+- **ASS subtitle format** - Import timing from Aegisub-generated subtitle files
+
+### Custom song format
+
+Songs are defined using a text-based format that includes:
+
+- Metadata (name, artist, album, year)
+- Timing information (line or segment level)
+- Visual customization (alignment, colors, background effects)
+- Reading hints for non-Latin scripts (CJK characters, etc.)
+- Font overrides for special character support
+
+### OpenGL rendering
+
+The application uses modern OpenGL for hardware-accelerated rendering:
+
+- Custom shaders for background effects (gradients, clouds, animated patterns)
+- Dynamic fill effect that highlights characters as they're sung
+- Pulse animation synchronized with lyric segments
+- Album art display with optional shadow effects
+- Smooth text rendering using custom font rasterization
+
+### Multi-platform support
+
+Etsuko runs on multiple platforms with a single codebase:
+
+- **Desktop**: Linux, macOS, and Windows via native OpenGL
+- **Web**: Browser support through Emscripten targeting WebAssembly with WebGL 2
+
+## Architecture overview
+
+Etsuko follows a modular architecture built in C23:
+
+```
+├── Core Systems
+│   ├── etsuko.c        - Global initialization and mode switching
+│   ├── config.c        - Configuration management
+│   └── events.c        - Input handling and UI events
+│
+├── Operating Modes
+│   ├── karaoke.c       - Single song playback with lyrics
+│   └── main_menu.c     - Song selection interface
+│
+├── Rendering Pipeline
+│   ├── renderer.c      - OpenGL rendering backend
+│   ├── ui.c            - UI component rendering
+│   └── shaders/        - GLSL fragment and vertex shaders
+│
+├── Audio & Data
+│   ├── audio.c         - OpenAL audio playback
+│   ├── song.c          - Song format parsing and data structures
+│   └── repository.c    - Song file loading (local/remote)
+│
+└── Third-party
+    ├── stb_truetype    - Font rasterization
+    ├── stb_image       - Image loading
+    └── minimp3         - MP3 decoding
+```
+
+The application operates in two modes defined in `etsuko.h:14`:
+
+<CodeGroup>
+```c src/etsuko.h
+typedef enum Config_OpMode_t {
+    APP_MODE_NONE = 0,
+    // Shows a single song with album art and scrolling lyrics
+    APP_MODE_KARAOKE,
+    // Shows a menu where you can select a song to open
+    APP_MODE_MENU,
+} Config_OpMode_t;
+```
+</CodeGroup>
+
+## Use cases
+
+### Personal karaoke sessions
+
+Host karaoke nights with friends using custom song files. The fullscreen interface and real-time lyrics sync create an immersive singing experience.
+
+### Language learning
+
+Use the reading hints feature to display pronunciation guides under CJK characters or other non-Latin scripts, making it easier to sing along in foreign languages.
+
+### Lyrics display for live performances
+
+Display synchronized lyrics during performances or presentations. The customizable backgrounds and text alignment options adapt to different visual styles.
+
+### Web-based music visualization
+
+Embed Etsuko in websites as an interactive lyrics viewer. The WebAssembly build requires no plugins and works in modern browsers.
+
+## Configuration options
+
+Etsuko supports extensive customization through `config.c:48`:
+
+<Accordion title="Available configuration options">
+
+**Visual effects**
+- `enable_dynamic_fill` - Fill characters progressively as they're sung
+- `enable_pulse_effect` - Add pulsing animation to active lyrics (requires dynamic fill)
+- `enlarge_active_line` - Scale up the currently active lyric line
+- `hide_past_lyrics` - Fade away lines after they've been sung
+
+**Rendering options**
+- `draw_album_art_shadow` - Add shadow effect to album artwork
+- `draw_lyric_shadow` - Add shadow effect to lyric text
+- `show_loading_screen` - Display loading indicator while assets load
+
+**Text options**
+- `enable_reading_hints` - Show pronunciation guides under text segments
+- Font overrides for UI and lyrics (supports Noto Sans by default)
+
+**Timing options**
+- `time_scale` - Global time multiplier for debugging animations
+- `hide_ui_elements_delay_sec` - Auto-hide UI controls after inactivity
+
+</Accordion>
+
+<Note>
+  Configuration changes require recompiling the application. Runtime preferences (like toggling reading hints visibility) may be saved in future versions.
+</Note>
+
+## Technical requirements
+
+### Desktop platforms
+
+- **CMake** 3.14 or higher
+- **Ninja** build system
+- **C compiler** (C23 support recommended, Clang preferred)
+- **OpenGL** 3.0+ support
+- **GLEW** (OpenGL Extension Wrangler Library)
+- **GLFW3** (windowing and input)
+- **OpenAL** (audio playback)
+- **OpenSSL** (for HTTPS requests in menu mode)
+
+### Web platform
+
+- **Emscripten SDK** for WebAssembly compilation
+- **WebGL 2** / OpenGL ES 3.0 browser support
+
+<Warning>
+  The desktop-debug build preset enables AddressSanitizer (ASan) which adds runtime overhead. Use desktop-release for normal usage.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build and run Etsuko on your machine
+  </Card>
+  <Card title="Song format" icon="music" href="/song-format/overview">
+    Learn to create custom song files
+  </Card>
+</CardGroup>

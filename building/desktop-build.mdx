@@ -1,0 +1,258 @@
+---
+title: Desktop Build
+description: Build Etsuko for Linux, macOS, and Windows desktop platforms
+---
+
+This guide covers building Etsuko for desktop platforms using CMake and the available presets.
+
+## Quick Start
+
+<Steps>
+  <Step title="Configure the build">
+    Use the `desktop-release` preset to configure CMake:
+    
+    ```bash
+    cmake --preset desktop-release
+    ```
+  </Step>
+  
+  <Step title="Build the project">
+    Build using the same preset:
+    
+    ```bash
+    cmake --build --preset desktop-release
+    ```
+  </Step>
+  
+  <Step title="Run the application">
+    Change to the build directory and run the executable:
+    
+    ```bash
+    cd ./build/desktop-release
+    ./etsuko
+    ```
+  </Step>
+</Steps>
+
+<Note>
+The application expects song files to be present in the `assets/` directory. Upon first run, it may fail if no songs are configured. See the [Song Format Guide](/song-format/overview) for details on setting up content.
+</Note>
+
+## Build Presets
+
+Etsuko provides several CMake presets for desktop builds:
+
+<Tabs>
+  <Tab title="desktop-release">
+    The standard release build with optimizations enabled.
+    
+    ```bash
+    cmake --preset desktop-release
+    cmake --build --preset desktop-release
+    ```
+    
+    - **Build type**: Release
+    - **Output directory**: `build/desktop-release/`
+    - **Optimizations**: Enabled (`-O2` or higher)
+    - **Debug symbols**: Stripped (`-g0`)
+  </Tab>
+  
+  <Tab title="desktop-debug">
+    Debug build with AddressSanitizer and UndefinedBehaviorSanitizer enabled.
+    
+    ```bash
+    cmake --preset desktop-debug
+    cmake --build --preset desktop-debug
+    ```
+    
+    - **Build type**: Debug
+    - **Output directory**: `build/desktop-debug/`
+    - **Sanitizers**: ASan and UBSan enabled (`-fsanitize=address,undefined`)
+    - **Debug symbols**: Included (`-g`)
+    
+    <Warning>
+    The debug build will run slower due to sanitizer instrumentation, but should still be usable for testing.
+    </Warning>
+  </Tab>
+  
+  <Tab title="vcpkg builds">
+    For environments using vcpkg for dependency management:
+    
+    ```bash
+    # Debug build with vcpkg
+    cmake --preset vcpkg-debug
+    cmake --build --preset vcpkg-debug
+    
+    # Release build with vcpkg
+    cmake --preset vcpkg-release
+    cmake --build --preset vcpkg-release
+    ```
+    
+    <Info>
+    These presets automatically use the vcpkg toolchain file from `$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake`. Ensure the `VCPKG_ROOT` environment variable is set.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Assets Directory
+
+The build system automatically copies assets to the build output directory:
+
+- **`assets/`** - Tracked by git, contains fonts and default resources
+- **`assets_dbg/`** - Not tracked by git, for local testing files
+
+Both directories are merged into the output directory's `assets/` folder during the build process. Files from `assets_dbg/` will overwrite files from `assets/` if there are naming conflicts.
+
+```cmake
+# From CMakeLists.txt
+add_custom_command(TARGET etsuko POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/assets
+    $<TARGET_FILE_DIR:etsuko>/assets
+)
+```
+
+<Info>
+If `assets_dbg/` doesn't exist, the build will continue without errors. This directory is intended for local song files and testing content.
+</Info>
+
+## Platform-Specific Notes
+
+### Linux
+
+Linux is the primary development platform and should build straightforwardly:
+
+```bash
+# Install dependencies (Debian/Ubuntu)
+sudo apt-get install cmake ninja-build clang
+sudo apt-get install libglew-dev libglfw3-dev libopenal-dev libssl-dev
+
+# Build
+cmake --preset desktop-release
+cmake --build --preset desktop-release
+```
+
+<Note>
+The preferred compiler is Clang, but GCC should also work. The project uses C23 standard features.
+</Note>
+
+### macOS
+
+On macOS, dependencies can be installed via Homebrew:
+
+```bash
+# Install dependencies
+brew install cmake ninja glew glfw openal-soft
+
+# Build
+cmake --preset desktop-release
+cmake --build --preset desktop-release
+```
+
+OpenGL is typically included with the system on macOS.
+
+### Windows
+
+Windows builds are more complex due to dependency management. Using vcpkg is **strongly recommended**:
+
+<Steps>
+  <Step title="Install vcpkg">
+    Clone and bootstrap vcpkg if you haven't already:
+    
+    ```powershell
+    git clone https://github.com/Microsoft/vcpkg.git
+    .\vcpkg\bootstrap-vcpkg.bat
+    ```
+  </Step>
+  
+  <Step title="Set environment variable">
+    Set the `VCPKG_ROOT` environment variable:
+    
+    ```powershell
+    $env:VCPKG_ROOT = "C:\path\to\vcpkg"
+    ```
+  </Step>
+  
+  <Step title="Build with vcpkg preset">
+    Use the vcpkg-enabled presets:
+    
+    ```powershell
+    cmake --preset vcpkg-release
+    cmake --build --preset vcpkg-release
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Manual dependency installation on Windows is **not recommended**. The vcpkg approach handles all library linkage and path configuration automatically.
+</Warning>
+
+## Build Configuration
+
+All presets inherit from a base configuration:
+
+```json
+{
+  "name": "base",
+  "generator": "Ninja",
+  "cacheVariables": {
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+  }
+}
+```
+
+- **Generator**: Ninja (required)
+- **Compile commands**: Exported for IDE/tooling support
+- **C Standard**: C23
+
+## Compiler Warnings
+
+The project enables strict warnings for Clang and GCC:
+
+```cmake
+-Wall
+-Wextra
+-Wpedantic
+-Wno-unused-parameter
+```
+
+Contributed libraries (stb, minimp3) are compiled with warnings suppressed using `-w`.
+
+## Troubleshooting
+
+### Missing dependencies
+
+If CMake reports missing packages:
+
+```
+CMake Error: Could not find a package configuration file provided by "glfw3"
+```
+
+Ensure all dependencies are installed, or use the vcpkg presets which handle dependencies automatically.
+
+### Ninja not found
+
+All presets require Ninja. Install it via your package manager:
+
+```bash
+# Linux
+sudo apt-get install ninja-build
+
+# macOS
+brew install ninja
+
+# Windows (with chocolatey)
+choco install ninja
+```
+
+### Runtime errors
+
+If the application crashes on startup:
+
+1. Check that the `assets/` directory exists in the build output
+2. Verify that a valid song file is configured in `src/config.c`
+3. For debug builds, check sanitizer output for memory errors
+
+<Info>
+The desktop-debug preset includes AddressSanitizer, which will provide detailed error messages for memory issues.
+</Info>

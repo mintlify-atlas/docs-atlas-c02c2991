@@ -1,0 +1,289 @@
+---
+title: Reading Hints
+description: Adding pronunciation guides for CJK and non-Latin scripts
+---
+
+The `#readings` section provides a way to display reading hints (pronunciation guides) under specific parts of lyrics. This is especially useful for CJK characters (Chinese, Japanese, Korean) and other writing systems where pronunciation isn't immediately obvious.
+
+## Overview
+
+Reading hints appear as smaller text beneath the main lyric text, similar to furigana in Japanese or pinyin in Chinese. They help users understand how to pronounce or read characters that may be unfamiliar.
+
+<Info>
+  **Common use cases:**
+  - Furigana for Japanese kanji
+  - Pinyin for Chinese characters
+  - Romanization for Korean hangul
+  - Pronunciation guides for any non-Latin script
+</Info>
+
+## The #readings Section
+
+The `#readings` section contains one line for each lyric line, in the exact same order as they appear in `#lyrics` or `#ass`.
+
+### Basic Format
+
+Each line uses comma-separated `key=value` pairs:
+
+```txt
+key1=reading1,key2=reading2,key3=reading3
+```
+
+- **Key**: The text from the lyric line to annotate
+- **Value**: The reading hint to display under that text
+
+### Real Example from Source
+
+From the README example:
+
+```txt
+#lyrics
+
+First line of the song
+And the second one 光
+#readings
+
+First=text to show under First,line=Same for line,of=again
+one=text to show under one,光=hikari
+```
+
+This creates reading hints:
+- Under "First" → displays "text to show under First"
+- Under "line" → displays "Same for line"
+- Under "of" → displays "again"
+- Under "one" → displays "text to show under one"
+- Under "光" → displays "hikari"
+
+## Processing Rules
+
+### Sequential Processing
+
+Keys are processed **in ascending order** based on their position in the lyric line. Once a key is matched, the search for the next key begins **after** where the current key ends.
+
+<Accordion title="Why does order matter?">
+  This prevents ambiguity when:
+  
+  1. **The same word appears multiple times** in a line
+  2. **Words contain overlapping characters**
+  
+  By processing keys sequentially, you can specify different readings for different occurrences of the same text.
+</Accordion>
+
+### Multiple Occurrences
+
+<Warning>
+  Every occurrence of a key must be specified in order.
+</Warning>
+
+If a lyric line contains the same text multiple times, you must provide a reading hint for **each occurrence** in the order they appear:
+
+```txt
+#lyrics
+ABC is here and ABC is there
+#readings
+ABC=first,ABC=second
+```
+
+If you only specify `ABC=first`, only the **first** occurrence gets a reading hint (unless a previous key in the reading line moved the search position past the first ABC).
+
+### Skipping Characters
+
+You can skip characters by simply not including them in your reading hints:
+
+```txt
+#lyrics
+The 日本 language
+#readings
+日本=nihon
+```
+
+Here, "The" and "language" are not annotated—only "日本" gets a reading hint.
+
+### Spaces in Keys and Values
+
+Both keys and values can contain spaces:
+
+```txt
+#lyrics
+Hello World from Tokyo
+#readings
+Hello World=こんにちは世界,from Tokyo=東京から
+```
+
+## Complete Examples
+
+### Japanese Furigana
+
+```txt
+name=日本の歌
+albumArt=img/japan.jpg
+filePath=audio/nihon.mp3
+artist=山田太郎
+alignment=center
+fontOverride=fonts/NotoSansJP.ttf
+#timings
+0:00
+0:05
+0:12
+#lyrics
+
+春の風が吹く
+夏の海を見る
+#readings
+
+春=はる,風=かぜ,吹=ふ
+夏=なつ,海=うみ,見=み
+```
+
+This displays:
+- はる under 春
+- かぜ under 風
+- ふ under 吹
+- なつ under 夏
+- うみ under 海
+- み under 見
+
+### Chinese Pinyin
+
+```txt
+name=中文歌曲
+albumArt=img/chinese.jpg
+filePath=audio/zhongwen.mp3
+artist=歌手
+fontOverride=fonts/NotoSansSC.ttf
+#timings
+0:00
+0:06
+0:14
+#lyrics
+
+你好世界
+我爱音乐
+#readings
+
+你好=nǐ hǎo,世界=shì jiè
+我=wǒ,爱=ài,音乐=yīn yuè
+```
+
+### Mixed Languages
+
+```txt
+#lyrics
+
+Welcome to 東京 Japan
+Let's explore the 文化
+#readings
+
+東京=とうきょう
+文化=ぶんか
+```
+
+<Note>
+  Notice the first reading line is empty—it corresponds to the empty first lyric line (the moment before lyrics begin).
+</Note>
+
+## Line Correspondence
+
+<Warning>
+  **Critical:** Each line in `#readings` must correspond exactly to a line in `#lyrics` or `#ass`, in the same order.
+</Warning>
+
+If you have 5 lyric lines, you need 5 reading hint lines (even if some are empty):
+
+```txt
+#lyrics
+
+Line with no readings
+日本語 text
+Another normal line
+漢字 here
+#readings
+
+
+日本語=にほんご
+
+漢字=かんじ
+```
+
+Lines 1, 2, and 4 have empty reading hints (no annotations), while lines 3 and 5 have reading hints defined.
+
+## Implementation Details
+
+### Character Index Mapping
+
+Reading hints are mapped to **Unicode character indices**, not byte offsets. This ensures proper handling of multi-byte characters like CJK scripts.
+
+```c
+// From song.h:44-49
+typedef struct Song_LineReading_t {
+    // Unicode character index setting the bounds this reading hint is relative of
+    size_t start_ch_idx, end_ch_idx;
+    // The actual reading hint text
+    OWNING char *reading_text;
+} Song_LineReading_t;
+```
+
+### Enabling Reading Hints
+
+Reading hints are automatically enabled when the parser detects the `#readings` section:
+
+```c
+// From song.c:374-375
+else if ( str_equals_sized(buffer, "#readings", 9) ) {
+    g_song->has_reading_info = true;
+```
+
+<Info>
+  The application can toggle reading hint visibility at runtime, but they must be defined in the song file first.
+</Info>
+
+## Performance Considerations
+
+Reading hints are computed once during song loading and stored in memory. There's no runtime performance penalty for displaying them once loaded.
+
+From the README:
+
+> Although the same isn't true yet even for the config itself, these runtime toggles can have saved states in the future that live in a preferences file or the browser's local storage, and can have, e.g. the reading hints, hidden by default even though they're *enabled* in the config, so just hitting the shortcut will show them again.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use consistent romanization systems">
+    Stick to one romanization system throughout a song (e.g., Hepburn for Japanese, Hanyu Pinyin for Chinese) for consistency.
+  </Accordion>
+  
+  <Accordion title="Consider your audience">
+    If your audience is familiar with the language, you may not need reading hints for every character—only the uncommon or ambiguous ones.
+  </Accordion>
+  
+  <Accordion title="Test with your font">
+    Make sure your `fontOverride` includes glyphs for both the main text and the reading hints. Use comprehensive fonts like the Noto Sans CJK family.
+  </Accordion>
+  
+  <Accordion title="Keep reading hints concise">
+    Long reading hints may overflow or look cluttered. Keep them short and focused on pronunciation.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Reading hints not appearing">
+    - Verify the `#readings` section exists
+    - Ensure the number of reading lines matches the number of lyric lines
+    - Check that your font supports the characters you're using
+    - Make sure reading hints are enabled in the config
+  </Accordion>
+  
+  <Accordion title="Wrong text is annotated">
+    - Remember that keys are processed sequentially—check the order
+    - Ensure you're not skipping occurrences of repeated text
+    - Verify there are no typos in your keys
+  </Accordion>
+  
+  <Accordion title="Reading hints cut off or overlap">
+    - Use a smaller reading hint text
+    - Adjust line spacing in the application settings
+    - Ensure your font has proper metrics for subscript/smaller text
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,793 @@
+---
+title: 'UI System'
+description: 'Custom hierarchical UI framework with layout engine and animations'
+---
+
+## Overview
+
+The UI system (`ui.h`) provides a custom framework for building interactive interfaces with a scene graph, automatic layout computation, animations, and event handling. It's built on top of the renderer system and manages the complete UI lifecycle.
+
+## Initialization
+
+```c
+Ui_t *ui_init(void);
+void ui_finish(Ui_t *ui);
+```
+
+**`ui_init()`** creates and initializes:
+- Root container (matching screen dimensions)
+- Event system
+- Animation system
+- Layout engine
+
+**`ui_finish()`** destroys all UI resources:
+- All containers and drawables
+- Active animations
+- Event callbacks
+
+<Note>
+  The UI system should be initialized **after** `render_init()` as it depends on viewport information.
+</Note>
+
+## Container System
+
+### Container Structure
+
+```c
+typedef struct Container_t {
+    Bounds_t bounds;                    // Position and size
+    Container_t *parent;                // Parent container
+    Vector_t *child_drawables;          // Child drawables
+    Vector_t *child_containers;         // Child containers
+    Vector_t *animations;               // Container animations
+    Layout_t layout;                    // Layout configuration
+    bool enabled;                       // Visibility and interaction
+    ContainerFlags_t flags;             // Layout flags
+    double align_content_offset_y;      // Vertical alignment offset
+    double align_content_offset_x;      // Horizontal alignment offset
+    double viewport_y, viewport_x;      // Scroll viewport offsets
+    bool draw_debug_overlay;            // Debug visualization
+} Container_t;
+```
+
+Containers are the **organizational backbone** of the UI:
+- Form a tree hierarchy (scene graph)
+- Automatically compute child positions
+- Can contain drawables and other containers
+- Support scrolling via viewport offsets
+
+### Creating Containers
+
+```c
+Container_t *ui_make_container(
+    Ui_t *ui,
+    Container_t *parent,
+    const Layout_t *layout,
+    ContainerFlags_t flags
+);
+```
+
+**Example**:
+```c
+// Get root container
+Container_t *root = ui_root_container(ui);
+
+// Create a centered content area
+Layout_t layout = {
+    .flags = LAYOUT_CENTER,
+    .width = 800,
+    .height = 600
+};
+Container_t *content = ui_make_container(ui, root, &layout, CONTAINER_NONE);
+```
+
+### Container Flags
+
+```c
+typedef enum ContainerFlags_t {
+    CONTAINER_NONE = 0,
+    CONTAINER_VERTICAL_ALIGN_CONTENT = 1,    // Stack children vertically
+    CONTAINER_HORIZONTAL_ALIGN_CONTENT = 2,   // Stack children horizontally
+} ContainerFlags_t;
+```
+
+<Accordion title="Vertical Content Alignment">
+  ```c
+  Container_t *vstack = ui_make_container(
+      ui, parent, &layout,
+      CONTAINER_VERTICAL_ALIGN_CONTENT
+  );
+  ```
+  
+  Automatically stacks child elements vertically:
+  - First child at top
+  - Subsequent children below previous ones
+  - Uses `align_content_offset_y` to track position
+</Accordion>
+
+<Accordion title="Horizontal Content Alignment">
+  ```c
+  Container_t *hstack = ui_make_container(
+      ui, parent, &layout,
+      CONTAINER_HORIZONTAL_ALIGN_CONTENT
+  );
+  ```
+  
+  Automatically stacks child elements horizontally:
+  - First child at left
+  - Subsequent children to the right
+  - Uses `align_content_offset_x` to track position
+</Accordion>
+
+### Destroying Containers
+
+```c
+void ui_destroy_container(Ui_t *ui, Container_t *container);
+```
+
+Recursively destroys:
+- All child containers
+- All child drawables
+- Associated animations
+- Event callbacks
+
+## Drawable Components
+
+### Drawable Structure
+
+```c
+typedef struct Drawable_t {
+    DrawableType_t type;            // Text, image, rect, etc.
+    Texture_t *texture;             // Cached texture (if applicable)
+    Bounds_t bounds;                // Position and size
+    void *custom_data;              // Type-specific data
+    Container_t *parent;            // Parent container
+    bool enabled, dynamic;          // Visibility and caching
+    Layout_t layout;                // Layout configuration
+    uint8_t alpha_mod;              // Alpha (0-255)
+    Vector_t *animations;           // Animation definitions
+    Vector_t *active_animations;    // Running animations
+    float color_mod;                // Color multiplier
+    Shadow_t *shadow;               // Optional shadow
+    DrawRegionOptSet_t draw_regions; // Partial visibility
+    uint8_t underlay_alpha;         // Underlay transparency
+    bool draw_underlay;             // Underlay rendering
+    bool pending_recompute;         // Needs texture regeneration
+    bool center_on_scale;           // Center when scaling
+    Vector_t *events;               // Event callbacks
+} Drawable_t;
+```
+
+### Drawable Types
+
+```c
+typedef enum DrawableType_t {
+    DRAW_TYPE_TEXT = 0,
+    DRAW_TYPE_IMAGE,
+    DRAW_TYPE_PROGRESS_BAR,
+    DRAW_TYPE_RECTANGLE,
+    DRAW_TYPE_CUSTOM_TEXTURE
+} DrawableType_t;
+```
+
+### Creating Drawables
+
+<Accordion title="Text Drawables">
+  ```c
+  typedef struct Drawable_TextData_t {
+      char *text;                      // UTF-8 text string
+      FontType_t font_type;            // FONT_UI or FONT_LYRICS
+      double em;                       // Font size in em units
+      Color_t color;                   // Text color
+      int wrap_enabled;                // Enable text wrapping
+      double wrap_width_threshold;     // Wrap width in pixels
+      double measure_at_em;            // Size for measuring (if different)
+      double line_padding_em;          // Padding between lines
+      DrawableAlignment_t alignment;   // Text alignment
+      bool draw_shadow;                // Render text shadow
+      Vector_t *line_offsets;          // Computed line positions
+      bool compute_offsets;            // Calculate character positions
+      bool increased_line_padding;     // Extra line spacing
+  } Drawable_TextData_t;
+  
+  Drawable_t *ui_make_text(
+      Ui_t *ui,
+      const Drawable_TextData_t *data,
+      Container_t *container,
+      const Layout_t *layout
+  );
+  ```
+  
+  **Example**:
+  ```c
+  Drawable_TextData_t text_data = {
+      .text = "Hello, World!",
+      .font_type = FONT_UI,
+      .em = 1.5,
+      .color = { 255, 255, 255, 255 },
+      .wrap_enabled = false,
+      .draw_shadow = true
+  };
+  
+  Layout_t text_layout = {
+      .flags = LAYOUT_CENTER,
+      .offset_y = -50
+  };
+  
+  Drawable_t *text = ui_make_text(ui, &text_data, root, &text_layout);
+  ```
+</Accordion>
+
+<Accordion title="Image Drawables">
+  ```c
+  typedef struct Drawable_ImageData_t {
+      double border_radius_em;  // Border radius in em
+      bool draw_shadow;          // Render shadow
+  } Drawable_ImageData_t;
+  
+  Drawable_t *ui_make_image(
+      Ui_t *ui,
+      const unsigned char *bytes,
+      int length,
+      const Drawable_ImageData_t *data,
+      Container_t *container,
+      const Layout_t *layout
+  );
+  ```
+  
+  **Example**:
+  ```c
+  unsigned char *image_data = load_file("album.jpg", &size);
+  
+  Drawable_ImageData_t img_data = {
+      .border_radius_em = 1.0,
+      .draw_shadow = true
+  };
+  
+  Layout_t img_layout = {
+      .flags = LAYOUT_CENTER_X,
+      .offset_y = 100,
+      .width = 300,
+      .height = 300
+  };
+  
+  Drawable_t *album_art = ui_make_image(
+      ui, image_data, size, &img_data, root, &img_layout
+  );
+  ```
+</Accordion>
+
+<Accordion title="Rectangle Drawables">
+  ```c
+  typedef struct Drawable_RectangleData_t {
+      double border_radius_em;  // Border radius
+      Color_t color;             // Fill color
+  } Drawable_RectangleData_t;
+  
+  Drawable_t *ui_make_rectangle(
+      Ui_t *ui,
+      const Drawable_RectangleData_t *data,
+      Container_t *container,
+      const Layout_t *layout
+  );
+  ```
+  
+  **Example**:
+  ```c
+  Drawable_RectangleData_t rect_data = {
+      .border_radius_em = 0.5,
+      .color = { 50, 50, 50, 200 }
+  };
+  
+  Layout_t rect_layout = {
+      .flags = LAYOUT_CENTER,
+      .width = 400,
+      .height = 80
+  };
+  
+  Drawable_t *background = ui_make_rectangle(
+      ui, &rect_data, container, &rect_layout
+  );
+  ```
+</Accordion>
+
+<Accordion title="Progress Bar Drawables">
+  ```c
+  typedef struct Drawable_ProgressBarData_t {
+      double progress;            // 0.0 to 1.0
+      double border_radius_em;    // Border radius
+      Color_t fg_color, bg_color; // Foreground and background
+  } Drawable_ProgressBarData_t;
+  
+  Drawable_t *ui_make_progressbar(
+      Ui_t *ui,
+      const Drawable_ProgressBarData_t *data,
+      Container_t *container,
+      const Layout_t *layout
+  );
+  ```
+</Accordion>
+
+<Accordion title="Custom Drawables">
+  ```c
+  Drawable_t *ui_make_custom(
+      Ui_t *ui,
+      Container_t *container,
+      const Layout_t *layout
+  );
+  ```
+  
+  Creates a drawable with a null texture. Useful for:
+  - Custom rendering logic
+  - Dynamic content that can't be cached
+  - Placeholder elements
+</Accordion>
+
+### Modifying Drawables
+
+```c
+void ui_recompute_drawable(Ui_t *ui, Drawable_t *drawable);
+void ui_reposition_drawable(Ui_t *ui, Drawable_t *drawable);
+void ui_destroy_drawable(Ui_t *ui, Drawable_t *drawable);
+```
+
+**`ui_recompute_drawable`**: Regenerates texture (for text changes, etc.)
+
+**`ui_reposition_drawable`**: Recalculates position based on layout
+
+**`ui_destroy_drawable`**: Frees all resources
+
+### Updating Drawable Properties
+
+```c
+// Alpha control
+void ui_drawable_set_alpha(Drawable_t *drawable, int32_t alpha);
+void ui_drawable_set_alpha_immediate(Drawable_t *drawable, int32_t alpha);
+
+// Scale control
+void ui_drawable_set_scale_factor(Drawable_t *drawable, float scale);
+void ui_drawable_set_scale_factor_immediate(Drawable_t *drawable, float scale);
+void ui_drawable_set_scale_factor_dur(Drawable_t *drawable, float scale, double duration);
+
+// Color modulation
+void ui_drawable_set_color_mod(Drawable_t *drawable, float color_mod);
+
+// Draw regions (partial visibility)
+void ui_drawable_set_draw_region(Drawable_t *drawable, const DrawRegionOptSet_t *draw_regions);
+void ui_drawable_set_draw_region_immediate(Drawable_t *drawable, const DrawRegionOptSet_t *draw_regions);
+void ui_drawable_set_draw_region_dur(Drawable_t *drawable, const DrawRegionOptSet_t *draw_regions, double duration);
+void ui_drawable_disable_draw_region(Drawable_t *drawable);
+
+// Scale regions
+void ui_drawable_add_scale_region_dur(Drawable_t *drawable, const ScaleRegionOpt_t *region, double duration, AnimationApplyType_t apply_type);
+
+// Image changes
+void ui_drawable_set_image(Ui_t *ui, Drawable_t *drawable, const unsigned char *bytes, int length);
+
+// Underlay (background blur effect)
+void ui_drawable_set_draw_underlay(Drawable_t *drawable, bool draw, uint8_t alpha);
+```
+
+<Info>
+  Functions without `_immediate` suffix create **animated transitions**. Use `_immediate` variants for instant updates.
+</Info>
+
+## Layout System
+
+### Layout Structure
+
+```c
+typedef struct Layout_t {
+    LayoutFlags_t flags;                 // Layout mode flags
+    double offset_x, offset_y;           // Position offsets
+    double width, height;                // Dimensions
+    double padding_w, padding_h;         // Internal padding
+    const Drawable_t *relative_to_size;  // Size reference
+    const Drawable_t *relative_to;       // Position reference
+    SizeConstraint_t min_width, max_width;   // Width constraints
+    SizeConstraint_t min_height, max_height; // Height constraints
+} Layout_t;
+```
+
+### Layout Flags
+
+```c
+typedef enum LayoutFlags_t {
+    LAYOUT_NONE = 0,
+    
+    // Centering
+    LAYOUT_CENTER_X = 1 << 0,
+    LAYOUT_CENTER_Y = 1 << 1,
+    LAYOUT_CENTER = LAYOUT_CENTER_X | LAYOUT_CENTER_Y,
+    
+    // Proportional positioning (0.0 to 1.0 of parent)
+    LAYOUT_PROPORTIONAL_X = 1 << 2,
+    LAYOUT_PROPORTIONAL_Y = 1 << 3,
+    LAYOUT_PROPORTIONAL_POS = LAYOUT_PROPORTIONAL_X | LAYOUT_PROPORTIONAL_Y,
+    
+    // Proportional sizing
+    LAYOUT_PROPORTIONAL_W = 1 << 4,
+    LAYOUT_PROPORTIONAL_H = 1 << 5,
+    LAYOUT_PROPORTIONAL_SIZE = LAYOUT_PROPORTIONAL_W | LAYOUT_PROPORTIONAL_H,
+    
+    // Anchoring
+    LAYOUT_ANCHOR_BOTTOM_Y = 1 << 6,
+    LAYOUT_ANCHOR_RIGHT_X = 1 << 7,
+    LAYOUT_ANCHOR_CENTER_Y = 1 << 17,
+    LAYOUT_ANCHOR_CENTER_X = 1 << 18,
+    
+    // Special
+    LAYOUT_SPECIAL_KEEP_ASPECT_RATIO = 1 << 8,
+    
+    // Relative positioning
+    LAYOUT_RELATIVE_TO_Y = 1 << 11,
+    LAYOUT_RELATIVE_TO_X = 1 << 12,
+    LAYOUT_RELATIVE_TO_POS = LAYOUT_RELATIVE_TO_Y | LAYOUT_RELATIVE_TO_X,
+    LAYOUT_RELATIVE_TO_HEIGHT = 1 << 13,
+    LAYOUT_RELATIVE_TO_WIDTH = 1 << 14,
+    LAYOUT_RELATIVE_TO_SIZE = LAYOUT_RELATIVE_TO_HEIGHT | LAYOUT_RELATIVE_TO_WIDTH,
+    
+    // Include size in relative calculations
+    LAYOUT_RELATION_Y_INCLUDE_HEIGHT = 1 << 9,
+    LAYOUT_RELATION_X_INCLUDE_WIDTH = 1 << 10,
+    LAYOUT_RELATION_INCLUDE_SIZE = LAYOUT_RELATION_Y_INCLUDE_HEIGHT | LAYOUT_RELATION_X_INCLUDE_WIDTH,
+    
+    // Wrap around children
+    LAYOUT_WRAP_AROUND_X = 1 << 15,
+    LAYOUT_WRAP_AROUND_Y = 1 << 16,
+    LAYOUT_WRAP_AROUND = LAYOUT_WRAP_AROUND_X | LAYOUT_WRAP_AROUND_Y,
+    
+    // Proportional position relative to specific element
+    LAYOUT_PROPORTIONAL_X_POS_TO_RELATIVE = 1 << 19,
+    LAYOUT_PROPORTIONAL_Y_POS_TO_RELATIVE = 1 << 20,
+    LAYOUT_PROPORTIONAL_POS_TO_RELATIVE = LAYOUT_PROPORTIONAL_X_POS_TO_RELATIVE | LAYOUT_PROPORTIONAL_Y_POS_TO_RELATIVE,
+} LayoutFlags_t;
+```
+
+### Layout Examples
+
+<Accordion title="Centered Element">
+  ```c
+  Layout_t layout = {
+      .flags = LAYOUT_CENTER,
+      .width = 400,
+      .height = 300
+  };
+  ```
+  
+  Centers element both horizontally and vertically in parent.
+</Accordion>
+
+<Accordion title="Bottom-Right Anchored">
+  ```c
+  Layout_t layout = {
+      .flags = LAYOUT_ANCHOR_BOTTOM_Y | LAYOUT_ANCHOR_RIGHT_X,
+      .offset_x = -20,  // 20px from right
+      .offset_y = -20,  // 20px from bottom
+      .width = 100,
+      .height = 40
+  };
+  ```
+</Accordion>
+
+<Accordion title="Proportional Size (50% of parent)">
+  ```c
+  Layout_t layout = {
+      .flags = LAYOUT_PROPORTIONAL_SIZE | LAYOUT_CENTER,
+      .width = 0.5,   // 50% of parent width
+      .height = 0.5   // 50% of parent height
+  };
+  ```
+</Accordion>
+
+<Accordion title="Relative to Another Element">
+  ```c
+  Layout_t layout = {
+      .flags = LAYOUT_RELATIVE_TO_POS | LAYOUT_RELATION_Y_INCLUDE_HEIGHT,
+      .relative_to = title_drawable,
+      .offset_y = 10,  // 10px below title
+      .width = 300,
+      .height = 50
+  };
+  ```
+  
+  Positions element below `title_drawable` with 10px spacing.
+</Accordion>
+
+<Accordion title="Wrap Around Children">
+  ```c
+  Layout_t layout = {
+      .flags = LAYOUT_WRAP_AROUND | LAYOUT_CENTER_X,
+      .padding_w = 20,
+      .padding_h = 10
+  };
+  ```
+  
+  Container automatically sizes to fit children plus padding.
+</Accordion>
+
+### Size Constraints
+
+```c
+typedef enum SizeConstraintType_t {
+    CONSTRAINT_NONE = 0,
+    CONSTRAINT_ABSOLUTE = 1,  // Fixed pixel value
+    CONSTRAINT_RELATIVE = 2,  // Relative to bounds
+} SizeConstraintType_t;
+
+typedef struct SizeConstraint_t {
+    SizeConstraintType_t type;
+    double value;
+    Bounds_t *relative_to;
+} SizeConstraint_t;
+```
+
+**Example**:
+```c
+Layout_t layout = {
+    .flags = LAYOUT_CENTER,
+    .width = 800,
+    .max_width = { CONSTRAINT_RELATIVE, 0.9, &parent_bounds },  // Max 90% of parent
+    .min_height = { CONSTRAINT_ABSOLUTE, 200 }  // Min 200px tall
+};
+```
+
+## Event Handling
+
+### Event Types
+
+```c
+typedef enum UiEvent_t {
+    UI_EVENT_NONE = 0,
+    UI_EVENT_MOUSE_MOVE,
+    UI_EVENT_MOUSE_STOPPED,
+    UI_EVENT_KEY_PRESSED,
+    UI_EVENT_MOUSE_HOVER_ENTERED,
+    UI_EVENT_MOUSE_HOVER_EXITED,
+    UI_EVENT_MOUSE_CLICK,
+} UiEvent_t;
+```
+
+### Event Callback
+
+```c
+typedef void (*c_ui_event_callback)(
+    const UiEventOpts_t *opts,
+    const Drawable_t *target,
+    void *custom_data
+);
+
+typedef struct UiEventOpts_t {
+    UiEvent_t event;
+    struct {
+        double x, y;      // Mouse position
+        bool clicked;     // Mouse button state
+        double duration;  // Hover duration
+        double scroll;    // Scroll delta
+    } mouse;
+    struct {
+        Key_t key;        // Key code
+    } keyboard;
+} UiEventOpts_t;
+```
+
+### Registering Events
+
+```c
+void ui_add_event_callback(
+    Ui_t *ui,
+    UiEvent_t event_type,
+    Drawable_t *target,
+    c_ui_event_callback callback,
+    void *custom_data
+);
+
+void ui_add_global_event_callback(
+    const Ui_t *ui,
+    UiEvent_t event_type,
+    c_ui_event_callback callback,
+    void *custom_data
+);
+```
+
+**Example**:
+```c
+void on_button_click(const UiEventOpts_t *opts, const Drawable_t *target, void *data) {
+    printf("Button clicked at (%.0f, %.0f)\n", opts->mouse.x, opts->mouse.y);
+    // Handle click...
+}
+
+// Register event
+ui_add_event_callback(ui, UI_EVENT_MOUSE_CLICK, button_drawable, on_button_click, NULL);
+```
+
+<Note>
+  Use `ui_add_global_event_callback` for events not tied to specific drawables (e.g., global key presses).
+</Note>
+
+## Animation System
+
+### Animation Types
+
+```c
+typedef enum AnimationType_t {
+    ANIM_EASE_TRANSLATION = 0,  // Position animation
+    ANIM_FADE_IN_OUT,           // Alpha animation
+    ANIM_SCALE,                 // Scale animation
+    ANIM_DRAW_REGION,           // Partial visibility animation
+    ANIM_SCALE_REGION,          // Per-region scale animation
+} AnimationType_t;
+```
+
+### Easing Functions
+
+```c
+typedef enum AnimationEaseType_t {
+    ANIM_EASE_NONE = 0,      // Linear
+    ANIM_EASE_OUT_CUBIC,
+    ANIM_EASE_OUT_SINE,
+    ANIM_EASE_OUT_QUAD,
+    ANIM_EASE_OUT_CIRC
+} AnimationEaseType_t;
+```
+
+### Creating Animations
+
+<Accordion title="Translation Animation">
+  ```c
+  typedef struct Animation_EaseTranslationData_t {
+      double from_x, from_y;
+      double to_x, to_y;
+      double duration;
+      AnimationEaseType_t ease_func;
+  } Animation_EaseTranslationData_t;
+  
+  void ui_animate_translation(
+      Drawable_t *target,
+      const Animation_EaseTranslationData_t *data
+  );
+  ```
+  
+  **Example**:
+  ```c
+  Animation_EaseTranslationData_t anim = {
+      .from_x = 0, .from_y = -100,
+      .to_x = 0, .to_y = 0,
+      .duration = 0.5,
+      .ease_func = ANIM_EASE_OUT_CUBIC
+  };
+  ui_animate_translation(drawable, &anim);
+  ```
+</Accordion>
+
+<Accordion title="Fade Animation">
+  ```c
+  typedef struct Animation_FadeInOutData_t {
+      int32_t from_alpha, to_alpha;
+      double duration;
+      AnimationEaseType_t ease_func;
+  } Animation_FadeInOutData_t;
+  
+  void ui_animate_fade(
+      Drawable_t *target,
+      const Animation_FadeInOutData_t *data
+  );
+  ```
+  
+  **Example**:
+  ```c
+  Animation_FadeInOutData_t fade_in = {
+      .from_alpha = 0,
+      .to_alpha = 255,
+      .duration = 0.3,
+      .ease_func = ANIM_EASE_OUT_SINE
+  };
+  ui_animate_fade(text_drawable, &fade_in);
+  ```
+</Accordion>
+
+<Accordion title="Scale Animation">
+  ```c
+  typedef struct Animation_ScaleData_t {
+      double from_scale, to_scale;
+      double duration;
+  } Animation_ScaleData_t;
+  
+  void ui_animate_scale(
+      Drawable_t *target,
+      const Animation_ScaleData_t *data
+  );
+  ```
+</Accordion>
+
+### Container Animations
+
+```c
+void ui_container_animate_translation(
+    Container_t *container,
+    const Animation_EaseTranslationData_t *data
+);
+```
+
+Animates entire containers (and their children).
+
+## Rendering
+
+### Render Loop
+
+```c
+void ui_begin_loop(Ui_t *ui);
+void ui_draw(const Ui_t *ui);
+void ui_end_loop(void);
+```
+
+**Integration**:
+```c
+while (running) {
+    render_clear();
+    
+    ui_begin_loop(ui);  // Prepare UI for rendering
+    ui_draw(ui);        // Draw all elements
+    ui_end_loop();      // Finalize rendering
+    
+    render_present();
+}
+```
+
+**`ui_begin_loop`**:
+- Updates animations
+- Processes events
+- Recomputes layouts if needed
+
+**`ui_draw`**:
+- Traverses scene graph
+- Draws all enabled containers and drawables
+- Applies transformations and effects
+
+**`ui_end_loop`**:
+- Cleans up temporary state
+- Frees destroyed elements
+
+## Utility Functions
+
+```c
+// Window management
+void ui_on_window_changed(Ui_t *ui);
+void ui_set_window_title(const char *title);
+
+// Background
+void ui_set_bg_color(uint32_t color);
+void ui_set_bg_gradient(uint32_t primary, uint32_t secondary, BackgroundType_t type);
+
+// Position queries
+void ui_get_drawable_canon_pos(const Drawable_t *drawable, double *x, double *y);
+void ui_get_container_canon_pos(const Container_t *container, double *x, double *y, bool include_viewport_offset);
+
+// Layout helpers
+Container_t *ui_root_container(Ui_t *ui);
+double ui_compute_relative_horizontal(Ui_t *ui, double value, Container_t *parent);
+void ui_recompute_container(Ui_t *ui, Container_t *container);
+void ui_reposition_container(Ui_t *ui, Container_t *container);
+
+// Font management
+void ui_load_font(const unsigned char *data, int data_size, FontType_t type);
+```
+
+## Best Practices
+
+<Note>
+  **Performance**: Use `dynamic = false` for static drawables. Dynamic drawables regenerate textures every frame.
+</Note>
+
+<Info>
+  **Layout changes**: Call `ui_reposition_drawable()` or `ui_recompute_drawable()` when manually changing layout properties.
+</Info>
+
+**Memory management**:
+- Destroy unused drawables/containers to free GPU memory
+- Reuse textures when possible
+- Use null textures for dynamic content
+
+**Animation conflicts**:
+- Use `AnimationApplyType_t` to control concurrent animations
+- Avoid animating the same property from multiple sources

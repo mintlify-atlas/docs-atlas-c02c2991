@@ -1,0 +1,151 @@
+---
+title: Configuration Settings
+description: Understanding Etsuko's configuration system and core settings
+---
+
+## Overview
+
+Etsuko's configuration system is defined in `src/config.c` and `src/config.h`. The configuration provides a static, compile-time way to control how the application behaves at startup.
+
+<Note>
+Unlike runtime preferences that can be toggled by the user, configuration settings are permanent and determine which features are available at all during execution.
+</Note>
+
+## Config Structure
+
+The main configuration is defined by the `Config_t` structure:
+
+```c
+typedef struct {
+    // Font files to be used
+    OWNING char *ui_font, *lyrics_font;
+    // Operating mode
+    Config_OpMode_t op_mode;
+    // Global time scale
+    double time_scale;
+    // Karaoke options
+    struct KaraokeOpts_t karaoke;
+} Config_t;
+```
+
+### Accessing Configuration
+
+The current configuration is accessed via:
+
+```c
+Config_t *config_get(void);
+```
+
+This returns a singleton configuration instance that persists throughout the application lifecycle.
+
+## Core Settings
+
+### Operating Modes
+
+Etsuko supports two primary operating modes defined by `Config_OpMode_t`:
+
+<ParamField path="op_mode" type="Config_OpMode_t" default="APP_MODE_MENU">
+  The application's operating mode at startup
+  
+  **Available modes:**
+  - `APP_MODE_KARAOKE` - Shows a single song with album art and scrolling lyrics
+  - `APP_MODE_MENU` - Shows a menu where you can select songs
+</ParamField>
+
+### Default Song File
+
+<ParamField path="karaoke_song_file" type="char*" default='"tiny stars.txt"'>
+  The default song file to load when starting in karaoke mode. All song files are expected to be inside the `assets/` folder during runtime.
+  
+  The file should follow Etsuko's custom song format with metadata, timings, and lyrics.
+</ParamField>
+
+### Time Scale
+
+<ParamField path="time_scale" type="double" default="1.0">
+  Global time scale multiplier, primarily used for debugging animations.
+  
+  <Warning>
+  This applies to audio playback as well, which can produce weird results. Use only for debugging purposes.
+  </Warning>
+</ParamField>
+
+## Default Configuration
+
+The default configuration is defined in `src/config.c:39-66`:
+
+```c
+static Config_t *get_default_config(void) {
+    Config_t *config = malloc(sizeof(*config));
+    config->lyrics_font = strdup("NotoSans_ExtraCondensed-Bold.ttf");
+    config->ui_font = strdup("NotoSans-Regular.ttf");
+    config->op_mode = APP_MODE_MENU;
+    config->time_scale = 1.0;
+    config->karaoke = (struct KaraokeOpts_t) {
+        .song_file = strdup("tiny stars.txt"),
+        .hide_ui_elements_delay_sec = 2.0,
+        .enable_dynamic_fill = true,
+        .enable_reading_hints = true,
+        .enable_pulse_effect = true,
+        .hide_past_lyrics = true,
+        .draw_album_art_shadow = true,
+        .draw_lyric_shadow = true,
+        .show_loading_screen = true,
+        .enlarge_active_line = false,
+    };
+    return config;
+}
+```
+
+## Runtime vs Compile-Time Settings
+
+It's important to understand the distinction between configuration and runtime preferences:
+
+<Accordion title="Configuration (Compile-Time)">
+  - Defined in `config.c` and requires recompilation to change
+  - Determines which features are **available** at all
+  - Controls resource allocation and data generation
+  - Cannot be modified during program execution
+  - Example: `enable_dynamic_fill`, `enable_reading_hints`
+</Accordion>
+
+<Accordion title="Preferences (Runtime)">
+  - Can be toggled by the user during execution
+  - Controls **visibility** of UI elements and features
+  - Only works if the corresponding config option is enabled
+  - May support saved states in the future (preferences file or browser storage)
+  - Example: Hiding/showing reading hints when `enable_reading_hints` is true
+</Accordion>
+
+<Info>
+Setting a config option to `false` hard-disables that part of the application, preventing necessary data from being computed and resources from being allocated. This makes it impossible to toggle during execution.
+</Info>
+
+## Web-Specific Configuration
+
+For the Emscripten/WebAssembly build, Etsuko can load configuration from URL parameters:
+
+```c
+static void try_load_config_web(Config_t *config) {
+    const char *song = get_song_param();
+    if (strlen(song) > 0) {
+        asprintf(&config->karaoke.song_file, "%s.txt", song);
+        str_replace_char(config->karaoke.song_file, '_', ' ');
+        config->op_mode = APP_MODE_KARAOKE;
+    }
+}
+```
+
+This allows songs to be specified via URL query parameters like `?song=my_song_name`.
+
+## Modifying Configuration
+
+To change the default configuration:
+
+1. Edit the values in `src/config.c` in the `get_default_config()` function
+2. Rebuild the application
+3. The new configuration will take effect on the next run
+
+<Warning>
+Configuration changes require recompilation. There is currently no support for loading configuration from external files or saving runtime preferences.
+</Warning>

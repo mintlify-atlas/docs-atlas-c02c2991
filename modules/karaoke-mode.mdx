@@ -1,0 +1,474 @@
+---
+title: Karaoke Mode Module
+description: Real-time lyric display, timing synchronization, and visual effects
+---
+
+The karaoke mode module (`karaoke.h`) manages the core karaoke experience: displaying synchronized lyrics with dynamic fill effects, visual enhancements, reading hints, and album artwork.
+
+## Overview
+
+Karaoke mode (`APP_MODE_KARAOKE`) is one of the primary operating modes of Etsuko. It provides:
+
+- **Real-time lyric display** synchronized with audio playback
+- **Character-by-character fill effects** based on song timings
+- **Visual effects** including pulse, enlargement, and color transitions
+- **Reading hints** (furigana) for pronunciation guidance
+- **Album art rendering** with playback controls
+- **Progress tracking** with time display and seekable progress bar
+
+## State Structure
+
+The karaoke module maintains internal state through `Karaoke_t`:
+
+```c
+struct Karaoke_t {
+    Ui_t *ui;
+    struct {
+        Drawable_t *song_name_text;
+        Drawable_t *song_artist_album_text;
+        Drawable_t *elapsed_time_text;
+        Drawable_t *remaining_time_text;
+        Drawable_t *album_image;
+        Drawable_t *song_progressbar;
+        Drawable_t *play_button;
+        Drawable_t *pause_button;
+        Drawable_t *back_button;
+        Container_t *left_container;
+        Container_t *right_container;
+        Container_t *song_info_container;
+        Container_t *song_controls_container;
+        LyricsView_t *lyrics_view;
+        Drawable_t *hint_show_hints, *hint_show_lyrics, *hint_seek, *hint_play_pause;
+    } drawables;
+    bool hovering_controls;
+    struct {
+        Resource_t *song;
+        Resource_t *ui_font;
+        Resource_t *lyrics_font;
+        Resource_t *audio;
+        Resource_t *album_art;
+        ResourceBuffer_t *album_art_buffer;
+    } resources;
+    struct {
+        bool song_loaded;
+        bool ui_font_loaded, lyrics_font_loaded;
+        bool audio_loaded;
+        bool album_art_loaded;
+        Drawable_t *progress_bar;
+        Drawable_t *loading_text;
+    } loading;
+};
+```
+
+**Key components:**
+- `drawables` - UI elements for lyrics, controls, and information display
+- `resources` - Loaded assets (fonts, audio, album art, song data)
+- `loading` - Asset loading state tracking
+- `lyrics_view` - Specialized component for rendering synchronized lyrics
+
+## Lifecycle API
+
+```c
+Karaoke_t *karaoke_init(void);
+AppStatus_t karaoke_load_loop(Karaoke_t *state);
+void karaoke_setup(Karaoke_t *state);
+AppStatus_t karaoke_loop(const Karaoke_t *state);
+void karaoke_finish(const Karaoke_t *state);
+```
+
+<Accordion title="karaoke_init() - Initialize karaoke mode">
+**Returns:** Allocated `Karaoke_t` state structure
+
+**Initializes:**
+- UI system (`ui_init()`)
+- Event system (`events_init()`)
+- Audio system (`audio_init()`)
+- Karaoke state structure
+
+**Implementation** (karaoke.c:58):
+```c
+Karaoke_t *karaoke_init(void) {
+    Karaoke_t *karaoke = calloc(1, sizeof(*karaoke));
+    if (karaoke == NULL)
+        error_abort("Failed to allocate memory for karaoke.");
+
+    karaoke->ui = ui_init();
+    events_init();
+    audio_init();
+
+    return karaoke;
+}
+```
+</Accordion>
+
+<Accordion title="karaoke_load_loop() - Asynchronous asset loading">
+**Parameters:**
+- `state` - Karaoke state
+
+**Returns:** `AppStatus_t` - Non-zero when loading completes
+
+**Behavior:**
+- Called repeatedly in a loop during loading phase
+- Asynchronously loads: song data, fonts (UI and lyrics), audio file, album art
+- Updates loading progress bar
+- Returns completion status when all assets are loaded
+
+**Asset loading tracking:**
+```c
+static uint64_t get_total_loading_files_downloaded_bytes(const Karaoke_t *state);
+static uint64_t get_total_loading_files_size(const Karaoke_t *state);
+```
+</Accordion>
+
+<Accordion title="karaoke_setup() - Build karaoke UI">
+**Parameters:**
+- `state` - Karaoke state with loaded resources
+
+**Behavior:**
+- Called once after all assets are loaded
+- Constructs UI elements: lyrics view, album art, controls, progress bar
+- Initializes layout containers
+- Prepares visual effects and reading hints
+
+**Must be called before** `karaoke_loop()`
+</Accordion>
+
+<Accordion title="karaoke_loop() - Main karaoke rendering loop">
+**Parameters:**
+- `state` - Karaoke state
+
+**Returns:** `AppStatus_t` - Application status (continue, exit, mode change)
+
+**Responsibilities:**
+- Updates audio playback position
+- Synchronizes lyrics with current time
+- Renders lyric lines with fill effects
+- Updates visual effects (pulse, enlargement)
+- Handles user input (play/pause, seek, navigation)
+- Renders album art and controls
+
+**Called every frame** during karaoke mode
+</Accordion>
+
+<Accordion title="karaoke_finish() - Clean up karaoke mode">
+**Parameters:**
+- `state` - Karaoke state to free
+
+**Behavior:**
+- Frees all UI elements
+- Releases loaded resources
+- Destroys song data
+- Cleans up event and audio systems
+</Accordion>
+
+## Real-Time Lyric Display
+
+The core feature of karaoke mode is synchronized lyric display.
+
+### Timing Synchronization
+
+**Process:**
+
+1. **Get current playback time** from audio system
+2. **Apply time offset** from song configuration (`Song_t.time_offset`)
+3. **Find active lyric lines** where `current_time >= base_start_time`
+4. **Calculate line progress** for fill effects
+
+```c
+// Conceptual synchronization
+double current_time = audio_get_position() + song->time_offset;
+
+for (size_t i = 0; i < song->lyrics_lines->size; i++) {
+    Song_Line_t *line = song->lyrics_lines->data[i];
+    
+    if (current_time >= line->base_start_time &&
+        current_time < line->base_start_time + line->base_duration) {
+        // Line is currently active
+        double line_progress = current_time - line->base_start_time;
+        render_lyric_line_with_fill(line, line_progress);
+    }
+}
+```
+
+### LyricsView Component
+
+The `LyricsView_t` drawable handles specialized lyric rendering:
+
+```c
+LyricsView_t *lyrics_view;
+```
+
+**Features:**
+- Multi-line lyric display with scrolling
+- Dynamic text wrapping based on screen size
+- Current line highlighting
+- Fill effect rendering
+- Reading hint overlay
+
+## Dynamic Fill Effects
+
+### Character-by-Character Fill
+
+When songs include sub-timings (`Song_t.has_sub_timings == true`), lyrics fill character-by-character:
+
+**Implementation approach:**
+
+1. **Iterate through timing segments** in active line
+2. **Calculate cumulative time** using `Song_LineTiming_t.cumulative_duration`
+3. **Determine fill progress** for current segment
+4. **Render partial character** with color transition
+
+```c
+// Conceptual fill rendering
+for (int i = 0; i < line->num_timings; i++) {
+    Song_LineTiming_t *timing = &line->timings[i];
+    double segment_start = timing->cumulative_duration;
+    double segment_end = segment_start + timing->duration;
+    
+    if (line_progress >= segment_end) {
+        // Segment fully filled
+        render_text_segment(line, timing, FILLED_COLOR);
+    } else if (line_progress >= segment_start) {
+        // Segment partially filled
+        double fill_ratio = (line_progress - segment_start) / timing->duration;
+        render_text_segment_partial(line, timing, fill_ratio);
+    } else {
+        // Segment not yet active
+        render_text_segment(line, timing, UNFILLED_COLOR);
+    }
+}
+```
+
+### Fill Modes
+
+<Info>
+The `assume_full_sub_timing_when_absent` flag enables linear fill effects even when explicit sub-timings aren't provided by adding a single timing covering the entire line.
+</Info>
+
+**Available fill modes:**
+- **Linear fill** - Smooth left-to-right fill based on line duration
+- **Full-word fill** - Entire words/segments fill at once (requires sub-timings)
+- **Character fill** - Individual character fill (requires character-level timings)
+
+## Visual Effects
+
+### Pulse Effect
+
+Active lyric lines pulse subtly to draw attention:
+
+```c
+// Conceptual pulse
+double scale = 1.0 + 0.1 * sin(elapsed_time * 2.0);
+render_text_with_scale(text, scale);
+```
+
+### Enlargement Effect
+
+The currently singing line appears larger than surrounding lines:
+
+```c
+// Active line: larger font size
+// Previous/next lines: normal size
+// Smooth transitions between states
+```
+
+### Color Transitions
+
+Smooth color transitions for filled vs unfilled text:
+
+- **Unfilled** - Dimmed or outlined text
+- **Filling** - Gradient from unfilled to filled color
+- **Filled** - Full brightness/color
+
+## Reading Hints Display
+
+For songs with reading information (`Song_t.has_reading_info == true`):
+
+```c
+// Reading hints from Song_LineReading_t
+typedef struct Song_LineReading_t {
+    size_t start_ch_idx, end_ch_idx;
+    char *reading_text;
+} Song_LineReading_t;
+```
+
+**Display:**
+- Reading hints render **above** their corresponding text
+- Positioned based on character indices (`start_ch_idx`, `end_ch_idx`)
+- Smaller font size than main lyrics
+- Synchronized with lyric fill state
+
+**Example (Japanese furigana):**
+```
+    よ
+漢字 → 読み方
+```
+
+### Toggle Hints
+
+Users can show/hide reading hints:
+
+```c
+Drawable_t *hint_show_hints; // Keyboard hint for toggling
+```
+
+**Keyboard shortcut:** Typically `L` key (KEY_L) to toggle reading hints visibility
+
+## Album Art Rendering
+
+Album artwork is displayed alongside lyrics:
+
+```c
+Drawable_t *album_image;
+Resource_t *album_art;
+```
+
+**Loading:**
+- Path specified in `Song_t.album_art_path`
+- Loaded asynchronously during `karaoke_load_loop()`
+- Decoded into texture for rendering
+
+**Display:**
+- Positioned in side container (typically right side)
+- Scaled to fit available space
+- Maintains aspect ratio
+
+## Playback Controls
+
+### Control UI Elements
+
+```c
+Drawable_t *play_button;
+Drawable_t *pause_button;
+Drawable_t *back_button;
+Drawable_t *song_progressbar;
+Drawable_t *elapsed_time_text;
+Drawable_t *remaining_time_text;
+```
+
+### Seekable Progress Bar
+
+```c
+Drawable_t *song_progressbar;
+```
+
+**Features:**
+- Visual progress indicator
+- Click to seek to specific time
+- Updates in real-time with playback
+
+### Time Display
+
+```c
+Drawable_t *elapsed_time_text;   // "01:23"
+Drawable_t *remaining_time_text; // "-02:15"
+```
+
+Formats:
+- Elapsed: `MM:SS`
+- Remaining: `-MM:SS`
+
+### Keyboard Shortcuts
+
+```c
+Drawable_t *hint_show_hints;     // Toggle reading hints (L)
+Drawable_t *hint_show_lyrics;    // Show/hide lyrics
+Drawable_t *hint_seek;           // Seek controls (Arrow keys)
+Drawable_t *hint_play_pause;     // Play/pause (Space)
+```
+
+**Common controls:**
+- `Space` - Play/pause toggle
+- `Left/Right arrows` - Seek backward/forward
+- `L` - Toggle reading hints
+- `R` - Toggle lyrics visibility
+- `Escape` or back button - Return to menu
+
+## Layout Containers
+
+```c
+Container_t *left_container;           // Lyrics view
+Container_t *right_container;          // Album art
+Container_t *song_info_container;      // Song name, artist
+Container_t *song_controls_container;  // Playback controls
+```
+
+**Layout structure:**
+```
+┌─────────────────────────────────────┐
+│ Song Name - Artist (Album)          │
+├──────────────────────┬──────────────┤
+│                      │              │
+│  Lyrics View         │  Album Art   │
+│  (LyricsView_t)      │              │
+│                      │              │
+├──────────────────────┴──────────────┤
+│ ⏮ ⏯ ⏭  ━━━━━━━━━━  01:23 / 03:45  │
+└─────────────────────────────────────┘
+```
+
+## Integration with Other Modules
+
+### Audio Module
+
+```c
+// Initialize audio
+audio_init();
+
+// Load audio file
+Resource_t *audio = /* loaded during karaoke_load_loop */;
+
+// Get current playback position
+double current_time = audio_get_position();
+```
+
+### Event System
+
+```c
+// Initialize events
+events_init();
+
+// In karaoke_loop():
+events_loop();
+
+if (events_key_was_pressed(KEY_SPACE)) {
+    // Toggle play/pause
+}
+
+if (events_get_mouse_click(&x, &y)) {
+    // Handle UI interaction
+}
+```
+
+### Song Module
+
+```c
+// Get active song (loaded before karaoke mode)
+Song_t *song = song_get();
+
+// Access lyrics
+for (size_t i = 0; i < song->lyrics_lines->size; i++) {
+    Song_Line_t *line = song->lyrics_lines->data[i];
+    // Render lyric line
+}
+```
+
+## Performance Considerations
+
+<Note>
+**Rendering optimization:** Only visible lyric lines are rendered. Lines far from the current playback position are skipped to maintain performance.
+</Note>
+
+**Best practices:**
+
+- **Text caching** - Pre-render static text elements
+- **Partial updates** - Only update changing elements (progress bar, current line)
+- **Culling** - Skip rendering off-screen or inactive lines
+- **Resource preloading** - Load all assets during `karaoke_load_loop()` before playback starts
+
+## See Also
+
+- [Song Parsing](/modules/song-parsing) - Song data structures and loading
+- [Events](/modules/events) - User input handling
+- [UI System](/architecture/ui-system) - UI rendering and layout
+- [Configuration](/configuration/settings) - Karaoke display settings

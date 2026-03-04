@@ -1,0 +1,182 @@
+---
+title: Font Configuration
+description: Configuring fonts for UI and lyrics display in Etsuko
+---
+
+## Overview
+
+Etsuko uses two separate font configurations: one for UI elements and one for lyrics display. This allows for optimal readability with different font styles for different purposes.
+
+## Font Settings
+
+Fonts are configured in the `Config_t` structure defined in `src/config.h`:
+
+```c
+typedef struct {
+    // Font files to be used
+    OWNING char *ui_font, *lyrics_font;
+    // ... other fields
+} Config_t;
+```
+
+### UI Font
+
+<ParamField path="ui_font" type="char*" default='"NotoSans-Regular.ttf"'>
+  The font used for UI elements throughout the application.
+  
+  This should typically be a thinner, more UI-appropriate font that works well at smaller sizes for menus, buttons, and other interface elements.
+</ParamField>
+
+### Lyrics Font
+
+<ParamField path="lyrics_font" type="char*" default='"NotoSans_ExtraCondensed-Bold.ttf"'>
+  The font used for displaying song lyrics during karaoke mode.
+  
+  Preferably a bolder, more prominent font that stands out and remains readable when displayed over background images or gradients.
+</ParamField>
+
+## Default Noto Fonts
+
+Etsuko bundles Google Noto fonts in the `assets/` directory by default:
+
+- **NotoSans-Regular.ttf** - Used for UI elements
+- **NotoSans_ExtraCondensed-Bold.ttf** - Used for lyrics display
+
+<Info>
+The Noto font family is included without modification. These fonts are chosen for their excellent Unicode coverage and support for multiple writing systems.
+</Info>
+
+### Why Noto Fonts?
+
+Noto fonts provide:
+- Comprehensive Unicode support
+- Multiple weights and styles
+- Consistent appearance across languages
+- Support for CJK (Chinese, Japanese, Korean) characters
+- Coverage for non-Latin scripts
+
+## Font Loading Process
+
+Fonts are loaded at runtime using the `render_load_font()` function defined in `src/renderer.h:309`:
+
+```c
+/**
+ * Loads and stores the given font (truetype) and assigns it to the specified type.
+ * In case another font of the same type has already been loaded, it is freed and replaced
+ */
+void render_load_font(const unsigned char *data, int data_size, FontType_t type);
+```
+
+### Font Types
+
+The renderer supports two font types defined by `FontType_t`:
+
+<ParamField path="FONT_UI" type="FontType_t" default="0">
+  Usually a thinner, more UI-like font, although this is not enforced by the system.
+</ParamField>
+
+<ParamField path="FONT_LYRICS" type="FontType_t" default="1">
+  The font used to display lyrics. Preferably a bolder, more prominent font for better visibility.
+</ParamField>
+
+<Note>
+When a new font of the same type is loaded, the previously loaded font is automatically freed and replaced.
+</Note>
+
+## Per-Song Font Override
+
+Individual songs can override the default lyrics font using the `fontOverride` parameter in the song file header:
+
+```
+name=My Song
+albumArt=img/album.jpg
+filePath=files/song.mp3
+fontOverride=CustomFont.ttf
+#timings
+...
+```
+
+<ParamField path="fontOverride" type="string">
+  Specifies a custom font file to use for this specific song's lyrics.
+  
+  This is particularly useful for:
+  - Songs with special characters requiring specific fonts
+  - Languages with unique typography requirements
+  - Artistic choices for specific songs
+</ParamField>
+
+## Supporting CJK and Non-Latin Characters
+
+Etsuko is designed to support multiple writing systems beyond the Latin alphabet:
+
+### Character Support
+
+To display CJK (Chinese, Japanese, Korean) or other non-Latin characters:
+
+1. **Use an appropriate font** - Ensure your font file includes glyphs for the required characters
+2. **Set `fontOverride` in the song file** - Specify a font with the necessary character coverage
+3. **Use Noto CJK fonts** - The Noto font family has excellent CJK support variants
+
+### Reading Hints
+
+Etsuko includes a reading hints feature specifically designed for CJK and other non-alphabetic writing systems:
+
+```
+#readings
+First=text to show under First,line=Same for line
+光=hikari,私=watashi
+```
+
+<Info>
+Reading hints display pronunciation or transliteration below lyric segments, helping users understand how to read characters in unfamiliar scripts.
+</Info>
+
+This feature must be enabled in the configuration (`enable_reading_hints = true`) and defined in the song file's `#readings` section.
+
+## Changing Fonts
+
+### Method 1: Replace Default Fonts
+
+1. Place your custom `.ttf` font files in the `assets/` directory
+2. Update the font names in `src/config.c`:
+
+```c
+config->lyrics_font = strdup("YourCustomFont-Bold.ttf");
+config->ui_font = strdup("YourCustomFont-Regular.ttf");
+```
+
+3. Rebuild the application
+
+### Method 2: Per-Song Override
+
+Add `fontOverride=CustomFont.ttf` to individual song file headers without rebuilding the application.
+
+## Font File Requirements
+
+<ParamField path="Format" type="TrueType">
+  Font files must be in TrueType (`.ttf`) format.
+</ParamField>
+
+<ParamField path="Location" type="assets/">
+  All font files must be placed in the `assets/` folder during runtime.
+  
+  For the desktop build, this folder is automatically populated from `assets/` and `assets_dbg/` during the build process.
+</ParamField>
+
+<ParamField path="Encoding" type="Unicode">
+  Fonts should support Unicode encoding for proper character rendering across different languages.
+</ParamField>
+
+## Troubleshooting
+
+<Accordion title="Characters appear as boxes or missing glyphs">
+  The selected font doesn't include glyphs for those characters. Use a font with broader Unicode coverage or a font specifically designed for that writing system.
+</Accordion>
+
+<Accordion title="Font file not found error">
+  Ensure the font file is in the `assets/` folder and the filename in `config.c` matches exactly (including case sensitivity on Linux/macOS).
+</Accordion>
+
+<Accordion title="Font looks blurry or pixelated">
+  This is typically a rendering issue. Ensure you're using high-quality TrueType fonts and that the application's DPI settings are correct for your display.
+</Accordion>

@@ -1,0 +1,497 @@
+---
+title: Menu System Module
+description: Main menu mode for browsing and selecting songs from the repository
+---
+
+The menu system module (`main_menu.h`) provides the song browsing interface, allowing users to explore the song repository organized by artist and album, and select songs to play in karaoke mode.
+
+## Overview
+
+Menu mode (`APP_MODE_MENU`) is the primary navigation interface for Etsuko. It displays:
+
+- **Song repository browser** with artist and album organization
+- **Album artwork galleries** for visual browsing
+- **Song metadata** including title, artist, album, year, language, tags
+- **Search and filtering** capabilities
+- **Remote repository support** for loading songs from a server
+
+## State Structure
+
+The menu module maintains state through `MainMenu_t` (opaque structure):
+
+```c
+typedef struct MainMenu_t MainMenu_t;
+```
+
+Internal state includes:
+- Loaded song collection (organized by artist/album)
+- UI elements (containers, drawables, scroll views)
+- Selected artist/album/song tracking
+- Search/filter state
+- Remote repository connection
+
+## Lifecycle API
+
+```c
+MainMenu_t *menu_init();
+AppStatus_t menu_load_loop(MainMenu_t *menu);
+void menu_setup(MainMenu_t *menu);
+AppStatus_t menu_loop(MainMenu_t *menu);
+void menu_finish(MainMenu_t *menu);
+```
+
+<Accordion title="menu_init() - Initialize menu mode">
+**Returns:** Allocated `MainMenu_t` state structure
+
+**Initializes:**
+- Menu state structure
+- UI system
+- Event handling
+- Remote repository connection (if configured)
+</Accordion>
+
+<Accordion title="menu_load_loop() - Asynchronous resource loading">
+**Parameters:**
+- `menu` - Menu state
+
+**Returns:** `AppStatus_t` - Non-zero when loading completes
+
+**Behavior:**
+- Called repeatedly during loading phase
+- Loads song list JSON from repository
+- Loads UI fonts and assets
+- Parses song metadata
+- Returns completion status when ready
+
+**Loads:**
+- Song list (JSON format)
+- Album artwork thumbnails
+- UI fonts
+- Menu background assets
+</Accordion>
+
+<Accordion title="menu_setup() - Build menu UI">
+**Parameters:**
+- `menu` - Menu state with loaded resources
+
+**Behavior:**
+- Constructs menu UI layout
+- Creates artist/album/song list views
+- Initializes album art gallery
+- Sets up search and filter controls
+
+**Must be called** after `menu_load_loop()` completes, before `menu_loop()`
+</Accordion>
+
+<Accordion title="menu_loop() - Main menu rendering loop">
+**Parameters:**
+- `menu` - Menu state
+
+**Returns:** `AppStatus_t` - Application status (continue, switch to karaoke mode, exit)
+
+**Responsibilities:**
+- Renders song browser UI
+- Handles user input (navigation, selection, search)
+- Updates hover/selection states
+- Switches to karaoke mode when song is selected
+
+**Called every frame** during menu mode
+</Accordion>
+
+<Accordion title="menu_finish() - Clean up menu mode">
+**Parameters:**
+- `menu` - Menu state to free
+
+**Behavior:**
+- Frees all UI elements
+- Destroys song collection data
+- Releases loaded resources
+- Closes remote repository connection
+</Accordion>
+
+## Song Organization
+
+The menu system organizes songs hierarchically using structures from `song.h`:
+
+### Artist Organization
+
+```c
+typedef struct MenuArtist_t {
+    OWNING char *name;
+    OWNING HashMap_t *albums; // of MenuAlbum_t
+} MenuArtist_t;
+```
+
+**Structure:**
+- Artist name (e.g., "YOASOBI")
+- HashMap of albums by this artist
+- Albums keyed by album name
+
+### Album Organization
+
+```c
+typedef struct MenuAlbum_t {
+    OWNING char *name;
+    OWNING Vector_t *songs; // of MenuSong_t
+} MenuAlbum_t;
+```
+
+**Structure:**
+- Album name (e.g., "THE BOOK")
+- Vector of songs in this album
+- Maintains song order
+
+### Song Metadata
+
+```c
+typedef struct MenuSong_t {
+    OWNING char *id, *name, *artist, *album;
+    OWNING char *album_art_path;
+    OWNING char *tags;
+    OWNING char *language;
+    int year;
+} MenuSong_t;
+```
+
+**Fields:**
+- `id` - Unique identifier for loading the full song
+- `name` - Song title
+- `artist` - Artist name
+- `album` - Album name
+- `album_art_path` - Path to album artwork image
+- `tags` - Comma-separated tags for filtering
+- `language` - Language code (e.g., "ja", "en")
+- `year` - Release year
+
+### Hierarchical Structure
+
+```
+HashMap<string, MenuArtist_t> (artists)
+  └─ "YOASOBI"
+      └─ HashMap<string, MenuAlbum_t> (albums)
+          ├─ "THE BOOK"
+          │   └─ Vector<MenuSong_t> (songs)
+          │       ├─ "夜に駆ける"
+          │       ├─ "あの夢をなぞって"
+          │       └─ "ハルジオン"
+          └─ "THE BOOK 2"
+              └─ Vector<MenuSong_t>
+                  ├─ "群青"
+                  └─ "三原色"
+```
+
+## Song Repository Browsing
+
+### Navigation Flow
+
+1. **Artist Selection** - User browses list of artists
+2. **Album Selection** - After selecting artist, view their albums
+3. **Song Selection** - After selecting album, view songs in that album
+4. **Song Loading** - Selected song triggers transition to karaoke mode
+
+### UI Components
+
+**Typical layout:**
+
+```
+┌────────────────────────────────────────┐
+│  Etsuko - Song Selection               │
+├───────────┬────────────────────────────┤
+│ Artists   │ Albums / Songs             │
+├───────────┤                            │
+│ YOASOBI   │  THE BOOK                  │
+│ Ado       │  ┌──────┐  夜に駆ける       │
+│ King Gnu  │  │ Art  │  あの夢をなぞって  │
+│ ...       │  └──────┘  ハルジオン       │
+│           │                            │
+│           │  THE BOOK 2                │
+│           │  ┌──────┐  群青            │
+│           │  │ Art  │  三原色          │
+│           │  └──────┘                 │
+└───────────┴────────────────────────────┘
+```
+
+### Selection States
+
+- **Hover** - Visual highlight when mouse is over an item
+- **Selected** - Currently selected artist/album/song
+- **Active** - Currently playing song (remembered from last session)
+
+## Song List Parsing
+
+The menu loads song metadata from a JSON file:
+
+```c
+HashMap_t *menu_songs_parse(const char *src, int src_size);
+void menu_songs_destroy(HashMap_t *map);
+```
+
+### JSON Format
+
+Expected structure:
+
+```json
+[
+  {
+    "id": "song-001",
+    "name": "夜に駆ける",
+    "artist": "YOASOBI",
+    "album": "THE BOOK",
+    "albumArt": "images/yoasobi-the-book.jpg",
+    "year": 2019,
+    "language": "ja",
+    "tags": "j-pop,popular,anime"
+  },
+  {
+    "id": "song-002",
+    "name": "あの夢をなぞって",
+    "artist": "YOASOBI",
+    "album": "THE BOOK",
+    "albumArt": "images/yoasobi-the-book.jpg",
+    "year": 2020,
+    "language": "ja",
+    "tags": "j-pop,emotional"
+  }
+]
+```
+
+### Parsing Process
+
+<Accordion title="menu_songs_parse() - Parse song list">
+**Parameters:**
+- `src` - JSON string containing array of songs
+- `src_size` - Size of JSON buffer
+
+**Returns:**
+- `HashMap<string, MenuArtist_t>` - Artists organized by name
+
+**Process:**
+1. Parse JSON array of song objects
+2. For each song:
+   - Extract metadata fields
+   - Find or create `MenuArtist_t` for artist
+   - Find or create `MenuAlbum_t` for album within artist
+   - Create `MenuSong_t` and add to album's song vector
+3. Return HashMap of all artists
+
+**Organization:**
+- Artists are HashMap keys (O(1) lookup)
+- Albums are HashMap keys within artists (O(1) lookup)
+- Songs are stored in Vectors (preserve order)
+</Accordion>
+
+<Accordion title="menu_songs_destroy() - Free song collection">
+**Parameters:**
+- `map` - HashMap returned from `menu_songs_parse()`
+
+**Behavior:**
+- Recursively frees all artists, albums, and songs
+- Frees all string allocations
+- Destroys HashMaps and Vectors
+</Accordion>
+
+## Remote Repository Support
+
+The menu system can load songs from a remote server using `remote_repository.h`:
+
+```c
+void remote_load_resource(const char *path, Resource_t *resource);
+```
+
+### Remote Loading
+
+<Info>
+Remote repository support allows the desktop build to fetch song lists and assets from a remote server, enabling dynamic song collections without rebuilding the application.
+</Info>
+
+**Use cases:**
+- Load song list JSON from server endpoint
+- Fetch album artwork on-demand
+- Download song files and lyrics dynamically
+- Support for centralized song repositories
+
+### Resource Loading
+
+<Accordion title="remote_load_resource() - Load resource from server">
+**Parameters:**
+- `path` - Resource path (e.g., "/api/songs.json")
+- `resource` - Resource structure to populate
+
+**Behavior:**
+- Initiates HTTP request to remote server
+- Asynchronously downloads resource
+- Populates `Resource_t` buffer
+- Available for desktop builds
+
+**Use in menu:**
+```c
+// Load song list from remote server
+Resource_t *song_list = resource_create();
+remote_load_resource("/api/songs.json", song_list);
+
+// Wait for loading in menu_load_loop()
+while (!song_list->loaded) {
+    // Show loading progress
+}
+
+// Parse loaded JSON
+HashMap_t *artists = menu_songs_parse(
+    song_list->buffer->data,
+    song_list->buffer->size
+);
+```
+</Accordion>
+
+### Fallback Strategy
+
+Typical implementation pattern:
+
+1. **Try local** - Attempt to load from local file system
+2. **Fallback to remote** - If local load fails, use `remote_load_resource()`
+3. **Cache** - Optionally cache downloaded resources locally
+
+```c
+// Conceptual fallback
+if (!load_local_resource(path, resource)) {
+    remote_load_resource(path, resource);
+}
+```
+
+## Search and Filtering
+
+### Filter by Language
+
+Filter songs by language code:
+
+```c
+// Show only Japanese songs
+for each song in collection {
+    if (song->language == "ja") {
+        display(song);
+    }
+}
+```
+
+### Filter by Tags
+
+Filter using comma-separated tags:
+
+```c
+// Show songs tagged "popular"
+for each song in collection {
+    if (contains(song->tags, "popular")) {
+        display(song);
+    }
+}
+```
+
+### Text Search
+
+Search song names, artists, and albums:
+
+```c
+// Search for "夜に"
+for each song in collection {
+    if (contains_fuzzy(song->name, query) ||
+        contains_fuzzy(song->artist, query) ||
+        contains_fuzzy(song->album, query)) {
+        display(song);
+    }
+}
+```
+
+## Transition to Karaoke Mode
+
+When a song is selected:
+
+1. **Load full song data** - Load complete song file (lyrics, timings, etc.)
+2. **Switch mode** - Transition from `APP_MODE_MENU` to `APP_MODE_KARAOKE`
+3. **Initialize karaoke** - Call `karaoke_init()` and begin loading assets
+
+```c
+// Conceptual transition
+if (song_selected) {
+    // Store selected song ID
+    selected_song_id = song->id;
+    
+    // Return status to switch mode
+    return APP_STATUS_SWITCH_TO_KARAOKE;
+}
+```
+
+## Album Art Display
+
+Album artwork enhances visual browsing:
+
+### Loading Album Art
+
+```c
+// From MenuSong_t.album_art_path
+Resource_t *album_art = load_image(song->album_art_path);
+```
+
+**Strategies:**
+- **Lazy loading** - Load only visible album art
+- **Thumbnail cache** - Pre-load album art for current view
+- **Placeholder** - Show default image while loading
+
+### Gallery View
+
+Display album art in grid or list format:
+
+```
+┌────────┐ ┌────────┐ ┌────────┐
+│ Album  │ │ Album  │ │ Album  │
+│  Art   │ │  Art   │ │  Art   │
+│  #1    │ │  #2    │ │  #3    │
+└────────┘ └────────┘ └────────┘
+Album Name  Album Name  Album Name
+```
+
+## Event Handling
+
+The menu integrates with the event system for user interaction:
+
+```c
+// In menu_loop()
+events_loop();
+
+// Mouse click handling
+int32_t x, y;
+if (events_get_mouse_click(&x, &y)) {
+    // Check if click is on artist/album/song
+    handle_click(x, y);
+}
+
+// Scroll handling
+double scroll = events_get_mouse_scrolled();
+if (scroll != 0.0) {
+    // Scroll song list
+    scroll_offset += scroll;
+}
+
+// Keyboard navigation
+if (events_key_was_pressed(KEY_ARROW_DOWN)) {
+    select_next_item();
+}
+```
+
+## Performance Considerations
+
+<Note>
+**Virtualized rendering:** For large song collections, only render visible items to maintain performance. Off-screen items are skipped.
+</Note>
+
+**Optimization strategies:**
+
+- **Virtual scrolling** - Only render visible portion of song list
+- **Lazy album art loading** - Load images as they become visible
+- **Text caching** - Pre-render text elements that don't change
+- **Culling** - Skip rendering elements outside viewport
+
+## See Also
+
+- [Song Parsing](/modules/song-parsing) - MenuSong_t, MenuArtist_t, MenuAlbum_t structures
+- [Karaoke Mode](/modules/karaoke-mode) - Transition target when song is selected
+- [Events](/modules/events) - User input handling
+- [Configuration](/configuration/settings) - Repository settings and paths

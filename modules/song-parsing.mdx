@@ -1,0 +1,379 @@
+---
+title: Song Parsing Module
+description: Song file format parsing, data structures, and menu organization
+---
+
+The song parsing module (`song.h`) handles loading and parsing song files, managing lyric data, timings, and metadata. It also provides structures for organizing songs in the menu system.
+
+## Core Data Structures
+
+### Song Structure
+
+The `Song_t` structure represents a complete song with all its metadata and lyric information:
+
+```c
+typedef struct Song_t {
+    OWNING char *name, *translated_name, *artist, *album;
+    int year;
+    OWNING Vector_t *lyrics_lines; // of Song_Line_t
+    OWNING char *id;
+    OWNING char *file_path, *album_art_path;
+    OWNING char *credits;
+    OWNING char *karaoke, *language, *hidden;
+    Song_LineAlignment_t line_alignment;
+    uint32_t bg_color;
+    uint32_t bg_color_secondary;
+    double time_offset;
+    OWNING char *font_override;
+    Song_BgType_t bg_type;
+    bool has_sub_timings;
+    bool has_reading_info;
+    bool assume_full_sub_timing_when_absent;
+} Song_t;
+```
+
+**Key fields:**
+- `name`, `translated_name` - Song title and optional translation
+- `artist`, `album`, `year` - Song metadata
+- `lyrics_lines` - Vector of `Song_Line_t` containing all lyric lines
+- `album_art_path` - Path to album artwork image
+- `bg_color`, `bg_color_secondary` - Background gradient colors
+- `time_offset` - Timing compensation for lyric synchronization
+- `font_override` - Custom font file for this song
+- `has_sub_timings` - Whether the song includes character/syllable-level timing
+- `has_reading_info` - Whether reading hints (furigana) are available
+
+### Lyric Line Structure
+
+```c
+typedef struct Song_Line_t {
+    OWNING char *full_text;
+    double base_start_time, base_duration;
+    Song_LineTiming_t timings[MAX_TIMINGS_PER_LINE];
+    int32_t num_timings;
+    Song_LineAlignment_t alignment;
+    OWNING Vector_t *readings; // Of Song_LineReading_t
+} Song_Line_t;
+```
+
+**Components:**
+- `full_text` - Complete text of the lyric line
+- `base_start_time`, `base_duration` - Overall timing for the line
+- `timings` - Array of sub-timings (up to 24 segments per line)
+- `num_timings` - Number of timing segments in this line
+- `alignment` - Text alignment (left, center, right)
+- `readings` - Reading hints for portions of the text
+
+### Timing Segments
+
+```c
+typedef struct Song_LineTiming_t {
+    int32_t start_idx, end_idx;           // Byte index
+    int32_t start_char_idx, end_char_idx; // Unicode character index
+    double duration;                       // Segment duration in seconds
+    double cumulative_duration;            // Sum of previous segments
+} Song_LineTiming_t;
+```
+
+<Info>
+Timing segments enable character-by-character or syllable-by-syllable lyric display. Each segment can represent a single character, syllable, word, or the entire line.
+</Info>
+
+**Timing granularity:**
+- Tracks both byte offsets and Unicode character indices
+- Supports duration for smooth fill animations
+- Cumulative duration enables precise positioning in the line
+- Maximum of 24 timing segments per line
+
+### Reading Hints
+
+```c
+typedef struct Song_LineReading_t {
+    size_t start_ch_idx, end_ch_idx;  // Character bounds
+    OWNING char *reading_text;         // Reading hint text
+} Song_LineReading_t;
+```
+
+Reading hints provide pronunciation guides (like Japanese furigana) for portions of the lyric text.
+
+## Enumerations
+
+### Line Alignment
+
+```c
+typedef enum Song_LineAlignment_t {
+    SONG_LINE_LEFT = 0,
+    SONG_LINE_CENTER,
+    SONG_LINE_RIGHT
+} Song_LineAlignment_t;
+```
+
+Controls how lyric lines are aligned within their container. Can be set globally for the song or overridden per line.
+
+### Background Types
+
+```c
+typedef enum Song_BgType_t {
+    BG_SIMPLE_GRADIENT = 0,
+    BG_SOLID,
+    BG_SANDS_GRADIENT,
+    BG_RANDOM_GRADIENT,
+    BG_AM_LIKE_GRADIENT,
+    BG_CLOUD_GRADIENT,
+} Song_BgType_t;
+```
+
+**Available background effects:**
+- `BG_SIMPLE_GRADIENT` - Two-color gradient using `bg_color` and `bg_color_secondary`
+- `BG_SOLID` - Solid color background
+- `BG_SANDS_GRADIENT` - Sand-themed gradient effect
+- `BG_RANDOM_GRADIENT` - Randomized gradient pattern
+- `BG_AM_LIKE_GRADIENT` - Specific gradient style
+- `BG_CLOUD_GRADIENT` - Cloud-themed gradient effect
+
+## Song Loading
+
+### Primary API
+
+```c
+void song_load(const char *filename, const char *src, int src_size);
+Song_t *song_get(void);
+void song_destroy(void);
+```
+
+<Accordion title="song_load() - Load song from buffer">
+**Parameters:**
+- `filename` - Used to assign an ID to the song
+- `src` - Buffer containing song file data
+- `src_size` - Size of the source buffer
+
+**Behavior:**
+- Parses the complete song file from memory
+- Sets the global active song for karaoke mode
+- Call `song_get()` to retrieve the parsed song
+</Accordion>
+
+<Accordion title="song_get() - Get active song">
+Returns the current active song. Only applicable in karaoke operating mode (`APP_MODE_KARAOKE`).
+</Accordion>
+
+<Accordion title="song_destroy() - Free song memory">
+Frees all memory associated with the current active song including lyrics, timings, and metadata.
+</Accordion>
+
+## Song File Format
+
+Song files are parsed in blocks:
+
+### Block Types
+
+```c
+typedef enum {
+    BLOCK_HEADER = 0,
+    BLOCK_LYRICS,
+    BLOCK_TIMINGS,
+    BLOCK_ASS,      // Advanced SubStation Alpha format
+    BLOCK_READINGS,  // Reading hints/furigana
+    BLOCK_UNKNOWN
+} BlockType;
+```
+
+### Header Block
+
+The header contains key-value pairs defining song metadata:
+
+```
+name=Song Title
+translatedName=Translated Title
+artist=Artist Name
+album=Album Name
+year=2024
+albumArt=path/to/art.jpg
+filePath=path/to/audio.mp3
+bgColor=FF5733
+bgColorSecondary=33FF57
+alignment=center
+offset=0.5
+fontOverride=path/to/font.ttf
+bgType=simpleGradient
+writtenBy=Credits
+assumeFullSubTiming=yes
+```
+
+**Header parsing** (`read_header()` in song.c:15):
+- Splits on `=` to extract key-value pairs
+- Numeric values converted from strings (`year`, `bgColor`, `offset`)
+- Alignment values: `left`, `center`, `right`
+- Background types: `simpleGradient`, `solid`, `sands`, `randomGradient`, `amLike`, `cloud`
+
+### Timings Block
+
+Defines when each lyric line appears:
+
+```c
+static double convert_timing(const char *str, const size_t len) {
+    // Format: MM:SS.mmm
+    // Example: 01:23.456 = 1 minute, 23.456 seconds
+}
+```
+
+**Timing format:**
+- `MM:SS.mmm` - Minutes, seconds, milliseconds
+- Creates `Song_Line_t` entries with `base_start_time` and `base_duration`
+- Sub-timings (character-level) added in subsequent blocks
+
+### Lyrics Block
+
+Contains the actual lyric text for each line:
+
+```
+Lyric line text here
+Another line of lyrics
+```
+
+**Options:** Lines can include inline options using `#`:
+```
+Lyric text here #alignment=right
+```
+
+### ASS Block
+
+Supports Advanced SubStation Alpha format for advanced timing and styling.
+
+### Readings Block
+
+Provides reading hints (pronunciation guides) for specific character ranges within lyric lines.
+
+<Note>
+The parser expects timings to be defined before lyrics. Placing lyrics before timings will trigger an error: "Lyrics were placed before the timings" (song.c:124)
+</Note>
+
+## Menu System Structures
+
+The song module also provides data structures for organizing songs in the menu system:
+
+### MenuSong_t
+
+```c
+typedef struct MenuSong_t {
+    OWNING char *id, *name, *artist, *album;
+    OWNING char *album_art_path;
+    OWNING char *tags;
+    OWNING char *language;
+    int year;
+} MenuSong_t;
+```
+
+Lightweight song representation for menu browsing (without full lyric data).
+
+### MenuAlbum_t
+
+```c
+typedef struct MenuAlbum_t {
+    OWNING char *name;
+    OWNING Vector_t *songs; // of MenuSong_t
+} MenuAlbum_t;
+```
+
+Groups songs by album.
+
+### MenuArtist_t
+
+```c
+typedef struct MenuArtist_t {
+    OWNING char *name;
+    OWNING HashMap_t *albums; // of MenuAlbum_t
+} MenuArtist_t;
+```
+
+Organizes albums by artist in a hierarchical structure.
+
+## Menu Song Parsing
+
+```c
+HashMap_t *menu_songs_parse(const char *src, int src_size);
+void menu_songs_destroy(HashMap_t *map);
+```
+
+<Accordion title="menu_songs_parse() - Parse song list JSON">
+**Parameters:**
+- `src` - JSON string containing song list
+- `src_size` - Size of JSON buffer
+
+**Returns:**
+- HashMap with artist names as keys and `MenuArtist_t` as values
+
+**Structure:**
+```
+HashMap<string, MenuArtist_t>
+  └─ MenuArtist_t
+      └─ HashMap<string, MenuAlbum_t>
+          └─ MenuAlbum_t
+              └─ Vector<MenuSong_t>
+```
+</Accordion>
+
+<Accordion title="menu_songs_destroy() - Free menu song data">
+Frees the entire hierarchical structure of artists, albums, and songs.
+</Accordion>
+
+## Usage Examples
+
+### Loading a Song
+
+```c
+// Load song file into memory
+char *song_data = /* read from file */;
+int size = /* file size */;
+
+// Parse and set as active song
+song_load("my-song.txt", song_data, size);
+
+// Retrieve the parsed song
+Song_t *song = song_get();
+
+// Access song properties
+printf("Now playing: %s by %s\n", song->name, song->artist);
+printf("Total lines: %zu\n", song->lyrics_lines->size);
+
+// Clean up when done
+song_destroy();
+```
+
+### Accessing Lyric Lines
+
+```c
+Song_t *song = song_get();
+
+for (size_t i = 0; i < song->lyrics_lines->size; i++) {
+    Song_Line_t *line = song->lyrics_lines->data[i];
+    
+    printf("Line %zu: %s\n", i, line->full_text);
+    printf("  Start: %.2f, Duration: %.2f\n", 
+           line->base_start_time, line->base_duration);
+    printf("  Sub-timings: %d\n", line->num_timings);
+}
+```
+
+### Working with Sub-Timings
+
+```c
+Song_Line_t *line = /* get line */;
+
+for (int i = 0; i < line->num_timings; i++) {
+    Song_LineTiming_t *timing = &line->timings[i];
+    
+    // Extract segment text
+    int len = timing->end_idx - timing->start_idx;
+    char *segment = strndup(line->full_text + timing->start_idx, len);
+    
+    printf("Segment: %s, Duration: %.3f\n", segment, timing->duration);
+    free(segment);
+}
+```
+
+## See Also
+
+- [Karaoke Mode](/modules/karaoke-mode) - Using parsed songs for real-time display
+- [Menu System](/modules/menu-system) - Browsing song collections
+- [Configuration](/configuration/settings) - Song repository settings

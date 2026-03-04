@@ -1,0 +1,565 @@
+---
+title: Event System Module
+description: User input handling, GLFW integration, and event dispatching
+---
+
+The event system module (`events.h`) manages all user input and system events including keyboard input, mouse interaction, window events, and timing.
+
+## Overview
+
+The event system provides a centralized interface for:
+
+- **Keyboard input** - Key press detection with defined key codes
+- **Mouse interaction** - Click detection, position tracking, scroll input
+- **Window events** - Resize, close, focus changes
+- **Timing** - Frame delta time and elapsed time tracking
+- **GLFW integration** - Callback registration and event polling
+
+## Lifecycle API
+
+```c
+void events_init(void);
+void events_finish(void);
+void events_loop(void);
+void events_frame_end(void);
+void events_setup_callbacks(void *window);
+```
+
+<Accordion title="events_init() - Initialize event system">
+**Behavior:**
+- Currently does nothing (placeholder for future initialization)
+- Called at application startup
+
+**Note from source** (events.h:14):
+> Does absolutely nothing
+</Accordion>
+
+<Accordion title="events_finish() - Clean up event system">
+**Behavior:**
+- Currently does nothing (placeholder for future cleanup)
+- Called at application shutdown
+
+**Note from source** (events.h:16):
+> Does absolutely nothing 2
+</Accordion>
+
+<Accordion title="events_loop() - Process events">
+**Behavior:**
+- Polls input events from GLFW
+- Updates mouse position and click state
+- Processes keyboard input
+- Updates timing information
+
+**Called every frame** before rendering
+
+**Implementation notes** (events.h:18):
+> Checks a few stuff like mouse clicks and pointer position for the other event calls
+</Accordion>
+
+<Accordion title="events_frame_end() - End-of-frame event cleanup">
+**Behavior:**
+- Clears consumed events
+- Resets per-frame state (key presses, mouse clicks)
+
+**Called at end of frame** after rendering
+
+**Important note** (events.h:21-25):
+> This only exists due to a weird aspect of emscripten (or browsers), since events happen asynchronously and due to the way glfw works, all the callbacks are called mostly during the interval between frames, so if we clear the events in the beginning of the frame, nothing is ever registered (unless an event happens in the less than 1ms duration of a frame). So we clear them at the end to consume all the events generated between when the last frame ended and this one started.
+
+**Usage:**
+```c
+// Frame loop
+while (running) {
+    events_loop();      // Process events
+    render_frame();     // Render
+    events_frame_end(); // Clear per-frame state
+}
+```
+</Accordion>
+
+<Accordion title="events_setup_callbacks() - Register GLFW callbacks">
+**Parameters:**
+- `window` - GLFW window pointer (void* to avoid header dependency)
+
+**Behavior:**
+- Registers callback functions for GLFW events
+- Sets up keyboard, mouse, window, and scroll callbacks
+
+**Called once** during window initialization
+
+**Purpose** (events.h:27):
+> glfw specific stuff that registers callbacks to when events happen
+</Accordion>
+
+## Keyboard Input
+
+### Key Enumeration
+
+```c
+typedef enum Key_t {
+    KEY_SPACE = 0,
+    KEY_ARROW_LEFT,
+    KEY_ARROW_RIGHT,
+    KEY_R,
+    KEY_L,
+    KEY_INVALID
+} Key_t;
+```
+
+**Defined keys:**
+- `KEY_SPACE` - Spacebar (typically play/pause in karaoke mode)
+- `KEY_ARROW_LEFT` - Left arrow (seek backward)
+- `KEY_ARROW_RIGHT` - Right arrow (seek forward)
+- `KEY_R` - R key (toggle lyrics visibility)
+- `KEY_L` - L key (toggle reading hints)
+- `KEY_INVALID` - Invalid/unknown key
+
+<Info>
+The key enumeration is intentionally minimal, defining only the keys used by Etsuko. Additional keys can be added as needed.
+</Info>
+
+### Key Press Detection
+
+```c
+bool events_key_was_pressed(Key_t key);
+bool events_any_key_was_pressed(void);
+```
+
+<Accordion title="events_key_was_pressed() - Check specific key press">
+**Parameters:**
+- `key` - Key to check (from `Key_t` enum)
+
+**Returns:** `true` if the key was pressed in the last frame
+
+**Note:** Marked as deprecated (events.h:48):
+> [[deprecated("Use events instead")]]
+
+Likely being replaced with a more comprehensive event system.
+
+**Usage:**
+```c
+if (events_key_was_pressed(KEY_SPACE)) {
+    toggle_playback();
+}
+
+if (events_key_was_pressed(KEY_ARROW_LEFT)) {
+    seek_backward();
+}
+```
+</Accordion>
+
+<Accordion title="events_any_key_was_pressed() - Check any key press">
+**Returns:** `true` if any key was pressed in the last frame
+
+**Usage:**
+```c
+if (events_any_key_was_pressed()) {
+    reset_idle_timer();
+    show_controls();
+}
+```
+</Accordion>
+
+## Mouse Input
+
+### Mouse Position
+
+```c
+void events_get_mouse_position(int32_t *x, int32_t *y);
+```
+
+<Accordion title="events_get_mouse_position() - Get current mouse position">
+**Parameters:**
+- `x` - Output pointer for X coordinate
+- `y` - Output pointer for Y coordinate
+
+**Behavior:**
+- Returns mouse cursor position in screen coordinates
+- Coordinates are relative to pixel scale (accounting for high-DPI displays)
+
+**Note** (events.h:38):
+> Returns the mouse pointer position in screen coordinates relative to the pixel scale (in practice only applicable to macOS)
+
+**Usage:**
+```c
+int32_t mouse_x, mouse_y;
+events_get_mouse_position(&mouse_x, &mouse_y);
+
+if (is_point_in_button(mouse_x, mouse_y, button)) {
+    highlight_button(button);
+}
+```
+</Accordion>
+
+### Mouse Click Detection
+
+```c
+bool events_get_mouse_click(int32_t *x, int32_t *y);
+```
+
+<Accordion title="events_get_mouse_click() - Check mouse click">
+**Parameters:**
+- `x` - Output pointer for click X coordinate (optional, can be NULL)
+- `y` - Output pointer for click Y coordinate (optional, can be NULL)
+
+**Returns:** `true` if mouse was clicked in the last frame
+
+**Behavior:**
+- Returns click state and position
+- Position is relative to pixel scale
+
+**Note:** Marked as deprecated (events.h:40):
+> [[deprecated("Use events instead")]]
+
+**Usage:**
+```c
+int32_t click_x, click_y;
+if (events_get_mouse_click(&click_x, &click_y)) {
+    handle_click_at(click_x, click_y);
+}
+
+// Or just check if clicked without position
+if (events_get_mouse_click(NULL, NULL)) {
+    consume_click();
+}
+```
+</Accordion>
+
+### Mouse Scroll
+
+```c
+double events_get_mouse_scrolled(void);
+```
+
+<Accordion title="events_get_mouse_scrolled() - Get scroll amount">
+**Returns:** Scroll amount in the last frame (positive = up, negative = down)
+
+**Note:** Marked as deprecated (events.h:43):
+> [[deprecated("Use events instead")]]
+
+**Usage:**
+```c
+double scroll = events_get_mouse_scrolled();
+if (scroll != 0.0) {
+    scroll_offset += scroll * SCROLL_SPEED;
+}
+```
+</Accordion>
+
+### Mouse Movement Tracking
+
+```c
+bool events_mouse_moved(void);
+double events_time_since_mouse_stopped(void);
+```
+
+<Accordion title="events_mouse_moved() - Check if mouse moved">
+**Returns:** `true` if mouse moved between last frame and previous frame
+
+**Usage:**
+```c
+if (events_mouse_moved()) {
+    show_cursor();
+    reset_hide_timer();
+}
+```
+</Accordion>
+
+<Accordion title="events_time_since_mouse_stopped() - Get idle time">
+**Returns:** Time in seconds since mouse stopped moving
+
+**Purpose** (events.h:54):
+> Time since either the mouse stopped moving
+
+**Usage:**
+```c
+if (events_time_since_mouse_stopped() > 3.0) {
+    hide_cursor();
+    hide_controls();
+}
+```
+</Accordion>
+
+## Window Events
+
+### Window State
+
+```c
+bool events_has_quit(void);
+bool events_window_changed(void);
+```
+
+<Accordion title="events_has_quit() - Check for close request">
+**Returns:** `true` if window close was requested
+
+**Purpose** (events.h:29):
+> Returns whether the window was closed, basically
+
+**Usage:**
+```c
+while (!events_has_quit()) {
+    events_loop();
+    render_frame();
+    events_frame_end();
+}
+```
+</Accordion>
+
+<Accordion title="events_window_changed() - Check for resize">
+**Returns:** `true` if window dimensions changed
+
+**Purpose** (events.h:31):
+> Returns whether ui should be rearranged/recomputed because the screen's dimensions changed
+
+**Usage:**
+```c
+if (events_window_changed()) {
+    recompute_layout();
+    resize_framebuffers();
+}
+```
+</Accordion>
+
+### Pixel Scale (High-DPI Support)
+
+```c
+void events_set_window_pixel_scale(double scale);
+```
+
+<Accordion title="events_set_window_pixel_scale() - Set DPI scale">
+**Parameters:**
+- `scale` - Pixel scale factor (e.g., 2.0 for Retina displays)
+
+**Behavior:**
+- Adjusts coordinate transformations for high-DPI displays
+- Affects mouse position and click coordinates
+
+**Note** (events.h:51):
+> Returns a pixel scale from virtual pixel coordinates to real screen coordinates (in practice is 1.0 in all platforms other than macOS)
+
+**Usage:**
+```c
+// On macOS Retina display
+events_set_window_pixel_scale(2.0);
+
+// On standard displays
+events_set_window_pixel_scale(1.0);
+```
+</Accordion>
+
+## Timing
+
+### Frame Timing
+
+```c
+double events_get_delta_time(void);
+double events_get_elapsed_time(void);
+```
+
+<Accordion title="events_get_delta_time() - Get frame delta">
+**Returns:** Time elapsed in seconds between previous frame and current frame
+
+**Purpose** (events.h:33):
+> Returns the elapsed time since the previous frame and the current one
+
+**Usage:**
+```c
+double dt = events_get_delta_time();
+
+// Smooth animations
+animation_time += dt;
+position += velocity * dt;
+
+// Frame rate independent updates
+particle_update(particles, dt);
+```
+</Accordion>
+
+<Accordion title="events_get_elapsed_time() - Get total time">
+**Returns:** Total time elapsed in seconds since application started
+
+**Purpose** (events.h:35):
+> Returns the total elapsed time since the application started
+
+**Usage:**
+```c
+double elapsed = events_get_elapsed_time();
+
+// Periodic effects
+double pulse = sin(elapsed * 2.0);
+
+// Timed events
+if (elapsed > next_event_time) {
+    trigger_event();
+}
+```
+</Accordion>
+
+## GLFW Integration
+
+The event system integrates with GLFW for cross-platform window and input handling.
+
+### Callback Registration
+
+The `events_setup_callbacks()` function registers GLFW callbacks:
+
+```c
+// Conceptual implementation
+void events_setup_callbacks(void *window) {
+    GLFWwindow *glfw_window = (GLFWwindow*)window;
+    
+    glfwSetKeyCallback(glfw_window, key_callback);
+    glfwSetMouseButtonCallback(glfw_window, mouse_button_callback);
+    glfwSetCursorPosCallback(glfw_window, cursor_pos_callback);
+    glfwSetScrollCallback(glfw_window, scroll_callback);
+    glfwSetWindowSizeCallback(glfw_window, window_size_callback);
+    glfwSetWindowCloseCallback(glfw_window, window_close_callback);
+}
+```
+
+### Event Polling
+
+The `events_loop()` function calls GLFW's event polling:
+
+```c
+// Conceptual implementation
+void events_loop(void) {
+    glfwPollEvents(); // Process queued events
+    
+    // Update internal state based on callbacks
+    update_mouse_state();
+    update_keyboard_state();
+    update_timing();
+}
+```
+
+## Usage Patterns
+
+### Basic Event Loop
+
+```c
+// Initialize
+events_init();
+GLFWwindow *window = create_window();
+events_setup_callbacks(window);
+
+// Main loop
+while (!events_has_quit()) {
+    events_loop();
+    
+    // Handle input
+    if (events_key_was_pressed(KEY_SPACE)) {
+        toggle_playback();
+    }
+    
+    int32_t mx, my;
+    if (events_get_mouse_click(&mx, &my)) {
+        handle_click(mx, my);
+    }
+    
+    // Update
+    double dt = events_get_delta_time();
+    update_game(dt);
+    
+    // Render
+    render_frame();
+    
+    events_frame_end();
+}
+
+// Cleanup
+events_finish();
+```
+
+### UI Interaction
+
+```c
+// Check hover state
+int32_t mx, my;
+events_get_mouse_position(&mx, &my);
+
+for (size_t i = 0; i < buttons.size; i++) {
+    Button *btn = &buttons[i];
+    
+    if (point_in_rect(mx, my, btn->rect)) {
+        btn->hovered = true;
+        
+        if (events_get_mouse_click(NULL, NULL)) {
+            btn->on_click();
+        }
+    } else {
+        btn->hovered = false;
+    }
+}
+```
+
+### Scroll View
+
+```c
+// Scroll handling
+double scroll = events_get_mouse_scrolled();
+if (scroll != 0.0) {
+    scroll_offset += scroll * 20.0; // Scroll speed
+    scroll_offset = clamp(scroll_offset, 0.0, max_scroll);
+}
+
+// Render visible items based on scroll_offset
+render_scroll_view(items, scroll_offset);
+```
+
+### Auto-Hide Controls
+
+```c
+// Hide UI after inactivity
+if (events_mouse_moved() || events_any_key_was_pressed()) {
+    controls_visible = true;
+} else if (events_time_since_mouse_stopped() > 3.0) {
+    controls_visible = false;
+}
+
+if (controls_visible) {
+    render_controls();
+}
+```
+
+## Deprecation Notes
+
+<Note>
+Several event functions are marked as deprecated with the note "Use events instead". This suggests a migration to a new event system API (possibly event queues or callbacks).
+</Note>
+
+**Deprecated functions:**
+- `events_get_mouse_click()` (events.h:40)
+- `events_get_mouse_scrolled()` (events.h:43)
+- `events_key_was_pressed()` (events.h:48)
+
+The replacement event system is not yet defined in the current headers.
+
+## Platform Considerations
+
+### macOS (High-DPI)
+
+On macOS with Retina displays:
+
+```c
+// Set pixel scale for proper coordinate mapping
+events_set_window_pixel_scale(2.0);
+
+// Mouse coordinates are automatically scaled
+int32_t x, y;
+events_get_mouse_position(&x, &y); // Returns logical coordinates
+```
+
+### Emscripten (Web)
+
+The event system accounts for asynchronous browser events (see `events_frame_end()` notes):
+
+- Events are cleared at **end of frame** instead of beginning
+- Prevents losing events that occur between frames
+- Essential for proper input handling in browser environment
+
+## See Also
+
+- [Karaoke Mode](/modules/karaoke-mode) - Using events for playback control
+- [Menu System](/modules/menu-system) - Using events for navigation
+- [UI System](/architecture/ui-system) - UI event handling integration

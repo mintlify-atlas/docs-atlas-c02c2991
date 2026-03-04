@@ -1,0 +1,323 @@
+---
+title: Web Build (WASM)
+description: Build Etsuko for the web using Emscripten and WebAssembly
+---
+
+This guide covers building Etsuko for the web using Emscripten to target WebAssembly. The web build powers the [public demo](https://karaoke.wooby.moe/).
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install Emscripten SDK">
+    Download and install the Emscripten SDK:
+    
+    ```bash
+    # Clone the emsdk repository
+    git clone https://github.com/emscripten-core/emsdk.git
+    cd emsdk
+    
+    # Install and activate the latest SDK
+    ./emsdk install latest
+    ./emsdk activate latest
+    ```
+  </Step>
+  
+  <Step title="Configure environment">
+    Source the environment variables:
+    
+    ```bash
+    # Linux/macOS
+    source ./emsdk_env.sh
+    
+    # Windows
+    emsdk_env.bat
+    ```
+    
+    This sets the `EMSDK` environment variable required by the CMake preset.
+  </Step>
+  
+  <Step title="Create secret.h file">
+    Create a `src/secret.h` file defining the CDN base path:
+    
+    ```c
+    #ifndef SECRET_H
+    #define SECRET_H
+    
+    #define CDN_BASE_PATH "http://localhost:6931"
+    
+    #endif
+    ```
+    
+    <Note>
+    For local testing with `emrun`, use `localhost` with the port emrun uses (typically 6931). For production, set this to your CDN URL.
+    </Note>
+  </Step>
+</Steps>
+
+## Building
+
+Once Emscripten is configured, build using the `wasm-release` preset:
+
+```bash
+# Configure
+cmake --preset wasm-release
+
+# Build
+cmake --build --preset wasm-release
+```
+
+The output will be generated in `build/wasm-release/` with the following files:
+
+- `etsuko.html` - Main HTML file
+- `etsuko.js` - JavaScript runtime
+- `etsuko.wasm` - WebAssembly binary
+
+<Info>
+The build uses a custom shell file (`shell_minimal.html`) instead of Emscripten's default template.
+</Info>
+
+## Running Locally
+
+Use Emscripten's `emrun` command to run a local web server:
+
+```bash
+cd ./build/wasm-release/
+emrun ./etsuko.html
+```
+
+`emrun` will:
+- Start a local HTTP server (typically on port 6931)
+- Open the application in your default browser
+- Display console logs in the terminal
+
+<Warning>
+Do **not** open `etsuko.html` directly in a browser. The application requires a web server to function properly due to CORS restrictions and fetch API usage.
+</Warning>
+
+## CDN_BASE_PATH Configuration
+
+The `CDN_BASE_PATH` macro controls where the application fetches song files at runtime:
+
+### Local Development
+
+For testing with `emrun`:
+
+```c
+#define CDN_BASE_PATH "http://localhost:6931"
+```
+
+With this configuration:
+- Files are fetched from the same server as the HTML file
+- Place song files in the `build/wasm-release/assets/` directory
+- Path `localhost:6931/assets/song.txt` resolves to `./assets/song.txt`
+
+### Production Deployment
+
+For a remote server:
+
+```c
+#define CDN_BASE_PATH "https://cdn.example.com"
+```
+
+The application will fetch all asset files (audio, images, song data) from the specified CDN URL.
+
+<Info>
+Only the `etsuko.html`, `etsuko.js`, and `etsuko.wasm` files need to be served from your main domain. Assets can be served from a separate CDN for better performance.
+</Info>
+
+## Build Configuration
+
+The `wasm-release` preset uses the Emscripten toolchain:
+
+```json
+{
+  "name": "wasm-release",
+  "inherits": "base",
+  "displayName": "WebAssembly (Emscripten) Release",
+  "binaryDir": "build/wasm-release",
+  "cacheVariables": {
+    "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+    "CMAKE_BUILD_TYPE": "Release",
+    "CMAKE_SYSROOT": "$env{EMSDK}/upstream/emscripten/cache/sysroot",
+    "CMAKE_SYSTEM_NAME": "Emscripten"
+  }
+}
+```
+
+## Emscripten Compiler Flags
+
+The CMakeLists.txt configures Emscripten-specific options:
+
+### Compile Options
+
+```cmake
+target_compile_options(etsuko PRIVATE
+    "SHELL:-Oz"    # Optimize for size
+    "SHELL:-g0"    # Strip debug info
+)
+```
+
+### Link Options
+
+```cmake
+target_link_options(etsuko PRIVATE
+    "SHELL:-sUSE_GLFW=3"              # Use Emscripten's GLFW port
+    "SHELL:-lopenal"                  # Link OpenAL
+    
+    "SHELL:-sALLOW_MEMORY_GROWTH=1"   # Allow dynamic memory
+    "SHELL:-sEXIT_RUNTIME=0"          # Keep runtime alive
+    "SHELL:-sASYNCIFY=0"              # No async transforms
+    "SHELL:-sFETCH=1"                 # Enable Fetch API
+    
+    "SHELL:-sMIN_WEBGL_VERSION=1"
+    "SHELL:-sMAX_WEBGL_VERSION=2"
+    
+    "SHELL:-Oz"                       # Optimize for size
+    "SHELL:-g0"                       # Strip debug info
+    "SHELL:-flto"                     # Link-time optimization
+    "SHELL:-sFILESYSTEM=0"            # Disable filesystem
+    "SHELL:--closure=1"               # Use Closure Compiler
+    
+    "SHELL:--shell-file ${CMAKE_SOURCE_DIR}/shell_minimal.html"
+)
+```
+
+<Note>
+The build uses `-Oz` (optimize for size) instead of `-O3` to produce smaller WebAssembly binaries.
+</Note>
+
+## WebGL Requirements
+
+The web build requires:
+
+- **WebGL 2** (OpenGL ES 3.0) support
+- Modern browser (Chrome, Firefox, Safari, Edge)
+
+If WebGL 2 is not available, the application will fail to initialize. Users should check the browser console for errors.
+
+## Differences from Desktop Build
+
+<Tabs>
+  <Tab title="Dependencies">
+    **Desktop:**
+    - Requires system libraries (GLFW, GLEW, OpenAL, OpenSSL)
+    - Uses pthreads for threading
+    - Links against OpenGL
+    
+    **Web:**
+    - All dependencies provided by Emscripten
+    - No external libraries needed
+    - Uses WebGL for graphics
+  </Tab>
+  
+  <Tab title="File Access">
+    **Desktop:**
+    - Direct filesystem access
+    - Assets copied to `build/` directory
+    - Immediate file loading
+    
+    **Web:**
+    - Fetch API for remote assets
+    - CDN_BASE_PATH configuration required
+    - Asynchronous loading
+  </Tab>
+  
+  <Tab title="Asset Paths">
+    **Desktop:**
+    - All paths relative to `assets/` directory
+    - No subdirectories supported for song files
+    
+    **Web:**
+    - Supports subdirectories (e.g., `files/song.mp3`, `img/album.jpg`)
+    - Paths resolved relative to CDN_BASE_PATH
+  </Tab>
+  
+  <Tab title="Performance">
+    **Desktop:**
+    - Native performance
+    - No size constraints
+    
+    **Web:**
+    - Optimized for binary size (`-Oz`, Closure Compiler)
+    - Slightly slower due to WebAssembly overhead
+    - Dynamic memory growth enabled
+  </Tab>
+</Tabs>
+
+## Deployment
+
+To deploy the web build:
+
+<Steps>
+  <Step title="Build with production CDN path">
+    Update `src/secret.h` with your CDN URL and rebuild:
+    
+    ```c
+    #define CDN_BASE_PATH "https://cdn.yourdomain.com"
+    ```
+  </Step>
+  
+  <Step title="Upload application files">
+    Upload the core files to your web server:
+    
+    ```
+    etsuko.html
+    etsuko.js
+    etsuko.wasm
+    ```
+  </Step>
+  
+  <Step title="Upload assets to CDN">
+    Upload the `assets/` directory contents to your CDN at the path specified in CDN_BASE_PATH.
+  </Step>
+</Steps>
+
+<Warning>
+Ensure your CDN server has CORS headers properly configured to allow requests from your main domain.
+</Warning>
+
+## Troubleshooting
+
+### EMSDK not found
+
+If CMake reports that EMSDK is not set:
+
+```
+CMake Error: EMSDK environment variable is not set
+```
+
+Source the Emscripten environment file:
+
+```bash
+source /path/to/emsdk/emsdk_env.sh
+```
+
+### WebGL errors
+
+If the application fails to start in the browser:
+
+1. Open the browser console (F12)
+2. Check for WebGL initialization errors
+3. Verify WebGL 2 support at https://get.webgl.org/webgl2/
+
+### Asset loading failures
+
+If songs fail to load:
+
+1. Verify CDN_BASE_PATH matches your server URL
+2. Check browser console for fetch errors
+3. Ensure CORS headers are configured on the CDN
+4. Verify asset files exist at the expected paths
+
+<Info>
+The browser console will show detailed error messages for asset loading failures, including the full URL being fetched.
+</Info>
+
+### Large binary size
+
+If the WASM binary is larger than expected:
+
+- Ensure Closure Compiler is enabled (`--closure=1`)
+- Verify LTO is enabled (`-flto`)
+- Check that optimization level is `-Oz`
+- Consider removing unused features from `config.c`

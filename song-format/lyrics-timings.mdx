@@ -1,0 +1,230 @@
+---
+title: Lyrics and Timing Sections
+description: Synchronizing lyrics with audio using timings and ASS formats
+---
+
+There are two methods for defining lyrics and their timing in Etsuko: the simple `#timings` + `#lyrics` approach, and the more advanced `#ass` format using Aegisub subtitle files.
+
+## Method 1: Simple Timings
+
+The simple method separates timing information from lyric text using two sections.
+
+### The #timings Section
+
+The `#timings` section contains timestamps that mark when each lyric line should appear. The format is `M:SS` or `M:SS.ms` where:
+
+- `M` = minutes
+- `SS` = seconds
+- `ms` = milliseconds (optional, up to 2 decimal places)
+
+```txt
+#timings
+0:00
+0:05.75
+0:13.10
+0:17.50
+0:24.30
+```
+
+Each timestamp represents the start time for the corresponding lyric line. The duration is automatically calculated as the time until the next timestamp begins.
+
+<Info>
+  **Tip:** You can optionally specify an explicit end time using comma notation:
+  ```txt
+  0:05.75,0:13.10
+  ```
+  This sets a line to start at 0:05.75 and end at 0:13.10, regardless of when the next line begins.
+</Info>
+
+### The #lyrics Section
+
+The `#lyrics` section contains the actual text that will be displayed. **The first line is typically empty**, representing the moment before lyrics begin.
+
+```txt
+#lyrics
+
+First line of the song
+And the second one
+Third line here
+Fourth line continues
+```
+
+<Warning>
+  The `#timings` section **must** come before the `#lyrics` section. The parser will fail if you place them in the wrong order.
+</Warning>
+
+### Complete Example
+
+```txt
+name=My Song
+albumArt=img/album.jpg
+filePath=audio/song.mp3
+artist=Artist Name
+offset=0.3
+#timings
+0:00
+0:05.75
+0:13.10
+0:17.50
+#lyrics
+
+First line of the song
+And the second one
+Third line here
+```
+
+## Method 2: Aegisub Format
+
+For more precise control, especially when working with existing subtitle files, use the `#ass` section. This accepts Dialogue lines from Aegisub's Advanced SubStation Alpha format.
+
+### The #ass Section
+
+```txt
+#ass
+Dialogue: 0,0:00:00.00,0:00:05.75,Default,,0,0,0,,
+Dialogue: 0,0:00:05.75,0:00:13.10,Default,,0,0,0,,First line of the song
+Dialogue: 0,0:00:13.10,0:00:17.00,Default,,0,0,0,,And the second one
+Dialogue: 0,0:00:17.00,0:00:24.50,Default,,0,0,0,,Third line here
+```
+
+### Format Breakdown
+
+Each line follows the Aegisub Dialogue format:
+
+```
+Dialogue: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+```
+
+**Only the Start, End, and Text fields are used by Etsuko.** The other fields are required by the format but ignored.
+
+- **Start**: When the line appears (format: `H:MM:SS.cs` where cs = centiseconds)
+- **End**: When the line disappears
+- **Text**: The lyric text to display
+
+<Note>
+  When using the `#ass` format, **do not** use `#timings` or `#lyrics` sections. Use one method or the other, not both.
+</Note>
+
+### Sub-Timings (Karaoke Effect)
+
+The `#ass` format supports sub-timings for syllable-by-syllable or word-by-word highlighting using the `\k` tag:
+
+```txt
+Dialogue: 0,0:00:05.75,0:00:13.10,Default,,0,0,0,,{\k75}First {\k125}line {\k235}of {\k100}the {\k200}song
+```
+
+The number after `\k` represents the duration in **centiseconds** (1/100th of a second):
+
+- `{\k75}` = 0.75 seconds
+- `{\k125}` = 1.25 seconds
+
+<Info>
+  Sub-timings enable the "dynamic fill" effect, where text progressively highlights as the song plays, similar to traditional karaoke displays.
+</Info>
+
+## Inline Modifiers
+
+Both methods support inline modifiers using the `#` character at the end of a line. These override global settings for individual lines.
+
+### Alignment Modifier
+
+```txt
+And the second one 光#alignment=right
+```
+
+Available alignment values:
+- `left`
+- `center`
+- `right`
+
+### Multiple Modifiers
+
+Separate multiple modifiers with commas:
+
+```txt
+Special line#alignment=center,otherProperty=value
+```
+
+<Note>
+  Modifiers are custom to Etsuko and are processed separately from standard ASS tags.
+</Note>
+
+## Timing Offset Adjustment
+
+If your timing is consistently early or late, use the `offset` parameter in the header instead of manually adjusting every timestamp:
+
+```txt
+name=My Song
+offset=0.3
+#timings
+...
+```
+
+- **Positive offset** (e.g., `0.3`) delays lyrics by 0.3 seconds
+- **Negative offset** (e.g., `-0.5`) makes lyrics appear 0.5 seconds earlier
+
+<Accordion title="Why use offset instead of adjusting timestamps?">
+  Using the `offset` parameter allows you to fine-tune timing without editing hundreds of timestamps. It's especially useful when:
+  
+  - Converting from another format with slightly different timing
+  - Compensating for audio encoding delays
+  - Testing different timing adjustments quickly
+  
+  You can easily adjust the offset value and reload the song without recalculating all your timestamps.
+</Accordion>
+
+## Choosing Between Methods
+
+<CardGroup cols={2}>
+  <Card title="Use #timings + #lyrics when:" icon="simple">
+    - Creating timing by hand
+    - You only need line-level timing
+    - Simplicity is preferred
+    - You don't need syllable highlighting
+  </Card>
+  
+  <Card title="Use #ass when:" icon="wand-magic-sparkles">
+    - You have existing .ass subtitle files
+    - You need sub-timing for karaoke effects
+    - You want syllable-by-syllable precision
+    - Working with tools like Aegisub
+  </Card>
+</CardGroup>
+
+## Complete Working Example
+
+### Using #timings + #lyrics
+
+```txt
+name=Example Song
+albumArt=img/example.jpg
+filePath=audio/example.mp3
+artist=Example Artist
+alignment=center
+offset=0.3
+#timings
+0:00
+0:05
+0:13.1
+0:20.5
+#lyrics
+
+First line of the song
+And the second one 光#alignment=right
+Third line finishes it
+```
+
+### Using #ass
+
+```txt
+name=Example Song
+albumArt=img/example.jpg
+filePath=audio/example.mp3
+artist=Example Artist
+offset=0.3
+#ass
+Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,
+Dialogue: 0,0:00:05.00,0:00:13.10,Default,,0,0,0,,{\k250}First {\k300}line {\k260}of {\k200}the {\k300}song
+Dialogue: 0,0:00:13.10,0:00:20.50,Default,,0,0,0,,And the second one 光#alignment=right
+Dialogue: 0,0:00:20.50,0:00:28.00,Default,,0,0,0,,Third line finishes it
+```
