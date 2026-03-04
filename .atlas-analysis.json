@@ -1,0 +1,96 @@
+{
+  "projectType": "general",
+  "projectName": "Etsuko",
+  "projectDescription": "A karaoke application with real-time synced lyrics and custom song format support",
+  "theme": "almond",
+  "primaryColor": "#E91E63",
+  "lightColor": "#F48FB1",
+  "darkColor": "#C2185B",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Building",
+            "pages": [
+              "building/desktop-build",
+              "building/web-build",
+              "building/requirements"
+            ]
+          },
+          {
+            "group": "Song Format",
+            "pages": [
+              "song-format/overview",
+              "song-format/metadata",
+              "song-format/lyrics-timings",
+              "song-format/reading-hints",
+              "song-format/advanced"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/settings",
+              "configuration/fonts",
+              "configuration/visual-options"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Architecture",
+        "groups": [
+          {
+            "group": "Core Components",
+            "pages": [
+              "architecture/overview",
+              "architecture/renderer",
+              "architecture/audio",
+              "architecture/ui-system"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/song-parsing",
+              "modules/karaoke-mode",
+              "modules/menu-system",
+              "modules/events"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time synced lyrics display with dynamic fill effects",
+    "Custom song format supporting timing, readings, and metadata",
+    "OpenGL-based rendering with custom UI framework",
+    "Multi-platform support (desktop and WebAssembly)",
+    "Main menu with song browsing and selection",
+    "Customizable visual effects and backgrounds",
+    "Support for CJK characters with reading hints",
+    "Multiple background gradient types and color sampling"
+  ],
+  "publicApiSurface": [
+    "render_init() - Initialize OpenGL renderer",
+    "render_make_text() - Create text textures",
+    "render_draw_texture() - Draw textures to screen",
+    "song_load() - Load song from custom format",
+    "audio_play() - Play audio files",
+    "global_mode_switch() - Switch between karaoke/menu modes",
+    "ui_create_container() - Create UI containers",
+    "render_make_image() - Create image textures",
+    "render_set_bg_gradient() - Set background effects",
+    "karaoke_init() - Initialize karaoke mode"
+  ]
+}
